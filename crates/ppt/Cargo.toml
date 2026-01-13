@@ -1,0 +1,15 @@
+[package]
+name = "ppt-ppt"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Legacy PPT (OLE/CFB) parser backend for PowerPoint text extraction"
+
+[dependencies]
+ppt-core.workspace = true
+thiserror.workspace = true
+cfb.workspace = true
+log.workspace = true
+
+[dev-dependencies]
