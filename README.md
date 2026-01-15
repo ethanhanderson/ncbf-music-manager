@@ -1,197 +1,127 @@
 # NCBF Music Manager
 
-A web application for extracting text from PowerPoint presentations and formatting them for ProPresenter import. Built with Next.js 16, Supabase, and Cloudflare Workers.
+A web app for church worship teams to plan services, manage songs, and export lyrics for ProPresenter.
 
-## Overview
+## Features
 
-This application allows worship teams to:
-1. Upload `.ppt` or `.pptx` worship song slides
-2. Automatically extract and clean the lyric text
-3. Download formatted output ready for ProPresenter import
+- **Worship Groups**: Create and manage multiple worship teams
+- **Song Library**: Songs are group-specific (each song belongs to one worship group)
+- **Set Planning**: Build weekly setlists with song ordering and notes
+- **File Upload**: Upload lyrics from TXT, RTF, DOCX, and PDF files
+- **Text Extraction**: Automatic plain text extraction from uploaded files
+- **ProPresenter Export**: Download sets as a ZIP of .txt files for ProPresenter import
 
-## Architecture
+## Tech Stack
 
+- **Framework**: Next.js 16 (App Router)
+- **UI**: React 19, shadcn/ui, Tailwind CSS 4
+- **Database**: Supabase (PostgreSQL)
+- **Storage**: Supabase Storage
+- **Deployment**: Vercel
+
+## Setup
+
+### 1. Environment Variables
+
+Create a `.env.local` file in this directory with:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://mpvvlpnrxsgwwrukmyar.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=<your-publishable-key>
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         User's Browser                                  │
-│  ┌───────────────────────────────────────────────────────────────────┐  │
-│  │  Next.js App (Vercel)                                              │  │
-│  │  - Upload UI                                                       │  │
-│  │  - Dashboard                                                       │  │
-│  │  - Real-time progress updates                                      │  │
-│  │  - Download/copy results                                           │  │
-│  └───────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────┘
-         │                    │                       │
-         │ Auth               │ Upload                │ Subscribe
-         ▼                    ▼                       ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           Supabase                                      │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐│
-│  │    Auth     │  │   Storage   │  │  PostgreSQL │  │    Realtime     ││
-│  │  (OAuth)    │  │   (Files)   │  │   (Data)    │  │   (Updates)     ││
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────────┘│
-│                                           │                             │
-│                                    ┌──────┴──────┐                      │
-│                                    │   Queues    │                      │
-│                                    │   (pgmq)    │                      │
-│                                    └──────┬──────┘                      │
-└───────────────────────────────────────────┼─────────────────────────────┘
-                                            │
-                                            │ Dequeue
-                                            ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      Cloudflare Worker (Cron)                          │
-│  ┌───────────────────────────────────────────────────────────────────┐  │
-│  │  WASM Extraction Module (Rust)                                     │  │
-│  │  - PPT/PPTX parsing                                                │  │
-│  │  - Text normalization                                              │  │
-│  │  - ProPresenter formatting                                         │  │
-│  └───────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────┘
+
+Get the publishable key from:
+1. Go to [Supabase Dashboard](https://supabase.com/dashboard)
+2. Select the `ncbf-music-manager` project
+3. Click the "Connect" button or go to Settings > API
+4. Copy the publishable key (format: `sb_publishable_...`)
+
+**Note**: This app uses Row Level Security (RLS) policies that allow public access, so the publishable key is sufficient for all operations. No service role key is needed.
+
+### 2. Install Dependencies
+
+```bash
+bun install
 ```
+
+### 3. Run Development Server
+
+```bash
+bun dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## Deployment on Vercel
+
+1. Push this repository to GitHub
+2. Import the project on [Vercel](https://vercel.com)
+3. Set the root directory to `app`
+4. Add environment variables:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`
+5. Deploy
 
 ## Project Structure
 
 ```
-ncbf-music-manager/
-├── app/                    # Next.js 16 web application
-│   ├── app/               # App Router pages
-│   │   ├── (app)/         # Protected routes
-│   │   │   ├── dashboard/ # Main dashboard
-│   │   │   ├── upload/    # File upload
-│   │   │   └── documents/ # Document details
-│   │   ├── login/         # Authentication
-│   │   └── auth/          # Auth callbacks
-│   ├── components/        # React components
-│   └── lib/               # Utilities & Supabase clients
-│
-├── crates/                 # Rust crates
-│   ├── core/              # Domain types & text processing
-│   ├── pptx/              # PPTX parser (Office Open XML)
-│   ├── ppt/               # PPT parser (OLE/CFB)
-│   ├── cli/               # CLI tool
-│   ├── desktop/           # Tauri desktop app
-│   └── worker-wasm/       # WASM module for Cloudflare
-│
-└── workers/
-    └── extract-worker/    # Cloudflare Worker
+app/
+├── app/                    # Next.js App Router pages
+│   ├── api/               # API routes
+│   │   ├── sets/          # ProPresenter export
+│   │   └── song-assets/   # File upload & extraction
+│   ├── groups/            # Group pages
+│   │   └── [slug]/        # Group detail & sets
+│   └── songs/             # Song library
+├── components/            # React components
+│   └── ui/                # shadcn/ui components
+└── lib/
+    ├── actions/           # Server actions
+    ├── extractors/        # File text extraction
+    └── supabase/          # Database client
 ```
 
-## Setup
+## Database Schema
 
-### Prerequisites
+- `music_groups`: Worship teams/bands
+- `songs`: Global song library
+- `song_arrangements`: Group-specific arrangements
+- `song_assets`: Uploaded files with extracted text
+- `sets`: Weekly service setlists
+- `set_songs`: Songs in a set with ordering
 
-- [bun](https://bun.sh/) - JavaScript runtime & package manager
-- [Rust](https://rustup.rs/) - For building the extraction engine
-- [wasm-pack](https://rustwasm.github.io/wasm-pack/) - For building WASM
-- [Supabase account](https://supabase.com/) - Backend services
-- [Cloudflare account](https://cloudflare.com/) - Worker hosting
+## Supported File Formats
 
-### 1. Clone and Install
+For lyrics upload:
+- `.txt` - Plain text
+- `.rtf` - Rich Text Format
+- `.docx` - Microsoft Word (modern)
+- `.pdf` - PDF documents
 
-```bash
-git clone <repo-url>
-cd ncbf-music-manager
+Note: Legacy `.doc` and PowerPoint files are not currently supported.
 
-# Install Next.js dependencies
-cd app
-bun install
-```
+## Usage
 
-### 2. Configure Environment
+### Creating a Set
 
-Copy the example environment file:
-```bash
-cp .env.example .env.local
-```
+1. Go to a worship group page
+2. Click "New Set"
+3. Select the service date
+4. Add songs from the library
+5. Reorder and add notes as needed
 
-Fill in your Supabase credentials:
-- `NEXT_PUBLIC_SUPABASE_URL` - Your Supabase project URL
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Anon/public key
-- `SUPABASE_SERVICE_ROLE_KEY` - Service role key (server-only)
+### Uploading Lyrics
 
-### 3. Database Setup
+1. Go to the song library
+2. Create or select a song
+3. Upload a file with lyrics
+4. Text is automatically extracted
+5. Edit extracted text if needed
 
-The Supabase project has already been configured with:
-- `documents` table - Uploaded file metadata
-- `extraction_jobs` table - Processing status & results
-- `presentations` storage bucket - File storage
-- Row Level Security policies
-- Queue functions for job processing
-- Realtime subscriptions
+### Exporting for ProPresenter
 
-### 4. Run the Development Server
-
-```bash
-cd app
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000)
-
-### 5. Deploy the Worker (Production)
-
-```bash
-cd workers/extract-worker
-bun install
-
-# Build WASM module
-bun run build
-
-# Set secrets
-wrangler secret put SUPABASE_URL
-wrangler secret put SUPABASE_SERVICE_ROLE_KEY
-
-# Deploy
-bun run deploy
-```
-
-## Features
-
-### For Users
-
-- **Upload**: Drag & drop or click to upload PPT/PPTX files (up to 50MB)
-- **Processing**: Automatic text extraction with real-time progress
-- **Output**: ProPresenter-ready text with configurable lines per slide
-- **Copy/Download**: Easy export of formatted lyrics
-
-### Technical
-
-- **Authentication**: Email/password and OAuth (Google, GitHub)
-- **Row Level Security**: Users can only access their own documents
-- **Real-time Updates**: Live progress via Supabase Realtime
-- **Background Processing**: Async extraction via job queue
-- **WASM Extraction**: Rust extraction engine compiled to WebAssembly
-
-## Development
-
-### Running the CLI
-
-For local testing without the web interface:
-
-```bash
-cargo run --bin ppt-extract -- --help
-cargo run --bin ppt-extract -- "path/to/file.pptx" --print
-```
-
-### Building WASM
-
-```bash
-cd crates/worker-wasm
-wasm-pack build --target web
-```
-
-### Running Tests
-
-```bash
-# Rust tests
-cargo test
-
-# Next.js lint
-cd app && bun run lint
-```
-
-## License
-
-MIT
+1. Open a set
+2. Click "Download for ProPresenter"
+3. A ZIP file downloads with:
+   - `_README.txt` - Set info and song list
+   - `01 - Song Name.txt` - Lyrics for each song

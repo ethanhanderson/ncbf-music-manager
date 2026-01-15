@@ -1,1 +1,0 @@
-{"default":{"identifier":"default","description":"Default capabilities for PPT Text Extractor","local":true,"windows":["main"],"permissions":["core:default","core:path:default","core:event:default","core:window:default","dialog:default","fs:default","fs:read-all","fs:write-all"]}}
