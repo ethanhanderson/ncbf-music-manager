@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { CreateSetDialog } from '@/components/create-set-dialog'
+import { AppLogo } from '@/components/app-logo'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   ArrowRight01Icon,
@@ -36,11 +37,14 @@ export default async function HomePage() {
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">NCBF Music Manager</h1>
-            <p className="text-muted-foreground mt-1">
-              Public directory for worship groups, sets, and songs.
-            </p>
+          <div className="flex items-start gap-4">
+            <AppLogo aria-hidden className="mt-0.5 h-10 w-10 text-primary" />
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">NCBF Music Manager</h1>
+              <p className="text-muted-foreground mt-1">
+                Plan Sunday sets, organize songs, and manage lyric slides for your music groups.
+              </p>
+            </div>
           </div>
         </div>
       </header>
@@ -135,7 +139,7 @@ export default async function HomePage() {
                 <CardHeader>
                   <CardTitle className="text-2xl">No upcoming Sunday set yet</CardTitle>
                   <CardDescription>
-                    Notify the music team so they can schedule and share the setlist.
+                    Create the next Sunday set to start building and sharing the setlist.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-wrap items-center gap-3">
@@ -152,10 +156,6 @@ export default async function HomePage() {
                       </button>
                     }
                   />
-                  <Link href="#groups" className={buttonVariants({ variant: 'outline', size: 'lg' })}>
-                    Browse groups
-                    <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} className="h-4 w-4" />
-                  </Link>
                 </CardContent>
               </>
             )}
