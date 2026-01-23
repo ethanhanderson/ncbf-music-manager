@@ -467,6 +467,53 @@ export const getRecentSongs = cache(async (groupId: string, limit: number = 5): 
   return data || []
 })
 
+export const getRecentSongsWithStats = cache(async (
+  groupId: string,
+  limit: number = 5
+): Promise<Array<Song & SongListStats>> => {
+  const supabase = createServerSupabaseClient()
+  const { data: songs, error: songsError } = await supabase
+    .from('songs')
+    .select('*')
+    .eq('group_id', groupId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (songsError || !songs) {
+    console.error('Error fetching recent songs:', songsError)
+    return []
+  }
+
+  if (songs.length === 0) {
+    return []
+  }
+
+  const songIds = songs.map((song) => song.id)
+
+  const [{ data: arrangements }, { data: usageRows }] = await Promise.all([
+    supabase
+      .from('song_arrangements')
+      .select('song_id')
+      .in('song_id', songIds),
+    supabase
+      .from('set_songs')
+      .select('song_id, sets!inner(service_date, group_id)')
+      .in('song_id', songIds)
+      .eq('sets.group_id', groupId),
+  ])
+
+  const stats = buildSongStats(
+    songs,
+    arrangements as Array<{ song_id: string }> || [],
+    usageRows as Array<{ song_id: string; sets?: { service_date: string } | null }> || []
+  )
+
+  return songs.map((song) => ({
+    ...song,
+    ...stats[song.id],
+  }))
+})
+
 export const getAllSongsWithGroups = cache(async (options: {
   search?: string
   groupIds?: string[]

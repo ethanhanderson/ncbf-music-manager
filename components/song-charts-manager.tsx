@@ -16,8 +16,10 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { ChartImportDialog } from '@/components/charts/chart-import-dialog'
 import {
   buildWordOrder,
+  parseLineIntoWords,
   renumberLinkedNotes,
 } from '@/components/charts/chart-notes-footnotes'
 import {
@@ -30,16 +32,9 @@ import {
   FieldSeparator,
   FieldSet,
 } from '@/components/ui/field'
-const VocalChartPreview = dynamic(
-  () => import('@/components/charts/vocal-chart-preview').then((mod) => ({ default: mod.VocalChartPreview })),
-  { ssr: false }
-)
-const ChordChartEditor = dynamic(
-  () => import('@/components/charts/chord-chart-editor').then((mod) => ({ default: mod.ChordChartEditor })),
-  { ssr: false }
-)
 import { updateSongArrangementChordsText } from '@/lib/actions/song-arrangements'
 import type { SongArrangement, SongSlide, SongSlideGroupArrangementItem } from '@/lib/supabase/server'
+import type { ChartImportResponse } from '@/lib/charts/import/types'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   PrinterIcon,
@@ -52,6 +47,15 @@ import {
   MinusSignIcon,
   PlusSignIcon,
 } from '@hugeicons/core-free-icons'
+
+const VocalChartPreview = dynamic(
+  () => import('@/components/charts/vocal-chart-preview').then((mod) => ({ default: mod.VocalChartPreview })),
+  { ssr: false }
+)
+const ChordChartEditor = dynamic(
+  () => import('@/components/charts/chord-chart-editor').then((mod) => ({ default: mod.ChordChartEditor })),
+  { ssr: false }
+)
 
 // Chart data types
 export interface VocalChartSettings {
@@ -317,6 +321,7 @@ export function SongChartsManager({
   const [isTransposeOpen, setIsTransposeOpen] = useState(false)
   const [transposeTarget, setTransposeTarget] = useState('')
   const [isNotesOpen, setIsNotesOpen] = useState(false)
+  const [isImportOpen, setIsImportOpen] = useState(false)
   const [notePlacementActive, setNotePlacementActive] = useState(false)
   const [openVocalNoteId, setOpenVocalNoteId] = useState<string | null>(null)
   const [openChordNoteId, setOpenChordNoteId] = useState<string | null>(null)
@@ -368,6 +373,18 @@ export function SongChartsManager({
       .map((item) => groupByKey.get(item.key))
       .filter((g): g is SlideGroupDefinition => g !== undefined)
   }, [selectedArrangementId, arrangementOrders, groupDefinitions])
+
+  const lineTextByKey = useMemo(() => {
+    const map = new Map<string, string>()
+    orderedGroups.forEach((group) => {
+      group.slides.forEach((slide) => {
+        slide.lines.forEach((line, lineIndex) => {
+          map.set(`${slide.id}-${lineIndex}`, line ?? '')
+        })
+      })
+    })
+    return map
+  }, [orderedGroups])
 
   const handlePrint = () => {
     window.print()
@@ -440,6 +457,81 @@ export function SongChartsManager({
       changed: withTimestamps.changed || renumbered.changed,
     }
   }, [ensureNoteTimestamps, noteWordOrder.wordIndexByKey])
+
+  const mergePlacements = useCallback((existing: ChordPlacement[], incoming: ChordPlacement[]) => {
+    let next = [...existing]
+    incoming.forEach((placement) => {
+      const lineKey = `${placement.slideId}-${placement.lineIndex}`
+      const lineText = lineTextByKey.get(lineKey) ?? ''
+      const words = parseLineIntoWords(lineText)
+      const word = words.find((range) => placement.charIndex >= range.start && placement.charIndex <= range.end)
+      if (word) {
+        next = next.filter(
+          (item) =>
+            item.slideId !== placement.slideId ||
+            item.lineIndex !== placement.lineIndex ||
+            item.charIndex < word.start ||
+            item.charIndex > word.end
+        )
+      } else {
+        next = next.filter(
+          (item) =>
+            item.slideId !== placement.slideId ||
+            item.lineIndex !== placement.lineIndex ||
+            item.charIndex !== placement.charIndex
+        )
+      }
+      next.push(placement)
+    })
+    return next
+  }, [lineTextByKey])
+
+  const handleApplyImport = useCallback(
+    ({ result, mode, includeNotes }: { result: ChartImportResponse; mode: 'merge' | 'replace'; includeNotes: boolean }) => {
+      setChordSettings((prev) => {
+        const placements = mode === 'replace'
+          ? result.placements
+          : mergePlacements(prev.placements, result.placements)
+
+        let nextNotes = prev.notes
+        if (includeNotes && result.notes.length > 0) {
+          const baseTime = Date.now()
+          const createdNotes = result.notes.map((note, index) => {
+            const row = Math.floor(index / 3)
+            const col = index % 3
+            const xPct = Math.min(0.9, 0.08 + col * 0.12)
+            const yPct = Math.min(0.9, 0.1 + row * 0.07)
+            const wordKey = `${note.slideId}-${note.lineIndex}-${note.wordStart}`
+            return {
+              id: createNoteId(),
+              text: note.text,
+              xPct,
+              yPct,
+              pageIndex: 0,
+              linkedWord: {
+                wordKey,
+                slideId: note.slideId,
+                lineIndex: note.lineIndex,
+                wordStart: note.wordStart,
+                wordText: note.wordText,
+              },
+              createdAtMs: baseTime + index,
+            }
+          })
+          nextNotes = mode === 'replace' ? createdNotes : [...prev.notes, ...createdNotes]
+          nextNotes = applyNoteRenumbering(nextNotes).notes
+        }
+
+        return {
+          ...prev,
+          placements,
+          notes: nextNotes,
+        }
+      })
+      setHasChanges(true)
+    },
+    [applyNoteRenumbering, createNoteId, mergePlacements, setHasChanges]
+  )
 
   const addVocalNote = useCallback((position: { xPct: number; yPct: number; linkedWord?: ChartNoteLinkedWord }) => {
     const id = createNoteId()
@@ -607,6 +699,14 @@ export function SongChartsManager({
 
   return (
     <div className="space-y-4 print:space-y-0">
+      <ChartImportDialog
+        open={isImportOpen}
+        onOpenChange={setIsImportOpen}
+        songId={songId}
+        groupId={groupId}
+        arrangementId={selectedArrangement.id}
+        onApply={handleApplyImport}
+      />
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <Tabs
           value={activeChartType}
@@ -1334,11 +1434,17 @@ export function SongChartsManager({
             )}
           </div>
 
-          {/* Print button */}
-          <Button variant="outline" size="sm" onClick={handlePrint}>
-            <HugeiconsIcon icon={PrinterIcon} strokeWidth={2} className="mr-1.5 h-4 w-4" />
-            Print
-          </Button>
+          <div className="flex items-center gap-2">
+            {activeChartType === 'chord' && (
+              <Button variant="outline" size="sm" onClick={() => setIsImportOpen(true)}>
+                Import
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={handlePrint}>
+              <HugeiconsIcon icon={PrinterIcon} strokeWidth={2} className="mr-1.5 h-4 w-4" />
+              Print
+            </Button>
+          </div>
         </div>
         <div className="chart-print-root bg-background p-4 shadow-[inset_0_0_0_1px_hsl(var(--border))] print:fixed print:inset-0 print:p-0 print:m-0 print:w-full print:max-w-none print:bg-transparent print:shadow-none">
           {activeChartType === 'vocal' ? (

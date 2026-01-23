@@ -2,9 +2,10 @@ export const revalidate = 60
 
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { formatDistanceToNow } from 'date-fns'
 import { getGroupBySlug } from '@/lib/actions/groups'
 import { getGroupSets, getUpcomingSetSongIds } from '@/lib/actions/sets'
-import { getRecentSongs, getSongsWithArrangements } from '@/lib/actions/songs'
+import { getRecentSongsWithStats, getSongsWithArrangements } from '@/lib/actions/songs'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -13,6 +14,7 @@ import { CreateSongDialog } from '@/components/create-song-dialog'
 import { BulkUploadDialog } from '@/components/bulk-upload-dialog'
 import { RenameGroupPopover } from '@/components/rename-group-popover'
 import { HugeiconsIcon } from '@hugeicons/react'
+import { ChevronRight } from 'lucide-react'
 import { 
   CalendarAdd01Icon, 
   MusicNote03Icon, 
@@ -45,7 +47,7 @@ export default async function GroupPage({ params }: GroupPageProps) {
   const [{ songs, arrangements }, sets, recentSongs, upcomingSetSongIds] = await Promise.all([
     getSongsWithArrangements(group.id),
     getGroupSets(group.id),
-    getRecentSongs(group.id, 5),
+    getRecentSongsWithStats(group.id, 5),
     getUpcomingSetSongIds(group.id),
   ])
   const today = new Date().toISOString().split('T')[0]
@@ -146,33 +148,42 @@ export default async function GroupPage({ params }: GroupPageProps) {
             <div className="lg:col-span-2 space-y-8">
                  {/* Upcoming Sets */}
                 <section>
-                  <h2 className="text-lg font-semibold mb-4">Upcoming Services</h2>
+                  <h2 className="text-lg font-semibold mb-4">Upcoming Sets</h2>
                   {upcomingSets.length === 0 ? (
                     <Card>
                       <CardContent className="py-8 text-center">
-                        <p className="text-muted-foreground">No upcoming services scheduled.</p>
+                        <p className="text-muted-foreground">No upcoming sets scheduled.</p>
                       </CardContent>
                     </Card>
                   ) : (
                     <div className="grid gap-4 sm:grid-cols-2">
                       {upcomingSets.map((set) => (
                         <Link key={set.id} href={`/groups/${group.slug}/sets/${set.id}`}>
-                          <Card className="transition-colors hover:bg-muted/50 cursor-pointer h-full">
-                            <CardHeader>
+                          <Card className="transition-colors hover:bg-muted/50 cursor-pointer h-full flex flex-col">
+                            <CardHeader className="pb-3">
                               <div className="flex items-start justify-between">
                                 <div>
                                   <CardTitle className="text-base">
                                     {formatDate(set.service_date)}
                                   </CardTitle>
+                                  <CardDescription className="mt-1">
+                                    {set.service_date === today 
+                                      ? 'Today' 
+                                      : formatDistanceToNow(new Date(set.service_date + 'T00:00:00'), { addSuffix: true })}
+                                  </CardDescription>
                                 </div>
                                 <Badge variant="secondary">Upcoming</Badge>
                               </div>
                             </CardHeader>
-                            {set.notes && (
-                              <CardContent>
-                                <p className="text-sm text-muted-foreground line-clamp-2">{set.notes}</p>
-                              </CardContent>
-                            )}
+                            <CardContent className="flex-1 flex flex-col justify-end">
+                                <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-3">
+                                    <HugeiconsIcon icon={MusicNote03Icon} className="w-4 h-4" />
+                                    <span>{set.songCount} {set.songCount === 1 ? 'song' : 'songs'}</span>
+                                </div>
+                                {set.notes && (
+                                    <p className="text-sm text-muted-foreground line-clamp-2 pt-3 border-t">{set.notes}</p>
+                                )}
+                            </CardContent>
                           </Card>
                         </Link>
                       ))}
@@ -183,23 +194,32 @@ export default async function GroupPage({ params }: GroupPageProps) {
                  {/* Past Sets */}
                  {pastSets.length > 0 && (
                   <section>
-                    <h2 className="text-lg font-semibold mb-4">Past Services</h2>
+                    <h2 className="text-lg font-semibold mb-4">Past Sets</h2>
                     <div className="grid gap-4 sm:grid-cols-2">
                       {pastSets.slice(0, 6).map((set) => (
                         <Link key={set.id} href={`/groups/${group.slug}/sets/${set.id}`}>
-                          <Card className="transition-colors hover:bg-muted/50 cursor-pointer h-full opacity-75">
-                            <CardHeader>
+                          <Card className="transition-colors hover:bg-muted/50 cursor-pointer h-full opacity-75 hover:opacity-100 flex flex-col">
+                            <CardHeader className="pb-3">
                               <CardTitle className="text-base">
                                 {formatDate(set.service_date)}
                               </CardTitle>
+                              <CardDescription>
+                                {formatDistanceToNow(new Date(set.service_date + 'T00:00:00'), { addSuffix: true })}
+                              </CardDescription>
                             </CardHeader>
+                            <CardContent className="flex-1 flex flex-col justify-end">
+                                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                    <HugeiconsIcon icon={MusicNote03Icon} className="w-4 h-4" />
+                                    <span>{set.songCount} {set.songCount === 1 ? 'song' : 'songs'}</span>
+                                </div>
+                            </CardContent>
                           </Card>
                         </Link>
                       ))}
                     </div>
                     {pastSets.length > 6 && (
                       <p className="text-sm text-muted-foreground mt-4 text-center">
-                        Showing 6 of {pastSets.length} past services
+                        Showing 6 of {pastSets.length} past sets
                       </p>
                     )}
                   </section>
@@ -226,12 +246,23 @@ export default async function GroupPage({ params }: GroupPageProps) {
                             <Link key={song.id} href={`/groups/${group.slug}/songs/${song.id}`} className="block">
                                 <Card className="hover:bg-muted/60 transition-colors">
                                     <CardContent className="p-3 flex items-center gap-3">
-                                        <div className="h-8 w-8 rounded-none bg-muted flex items-center justify-center shrink-0">
-                                            <HugeiconsIcon icon={MusicNote03Icon} className="w-4 h-4 text-primary" />
-                                        </div>
-                                        <div className="min-w-0">
+                                        <div className="min-w-0 flex-1">
                                             <p className="font-medium truncate text-sm">{song.title}</p>
+                                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground mt-1">
+                                                {song.totalUses === 0 ? (
+                                                    <span>Not used</span>
+                                                ) : (
+                                                    <>
+                                                        <span>Used {song.totalUses} {song.totalUses === 1 ? 'time' : 'times'}</span>
+                                                        <span aria-hidden="true">•</span>
+                                                        <span>Last used {song.lastUsedDate ? new Date(song.lastUsedDate).toLocaleDateString() : 'Never'}</span>
+                                                    </>
+                                                )}
+                                                <span aria-hidden="true">•</span>
+                                                <span>Added {new Date(song.created_at).toLocaleDateString()}</span>
+                                            </div>
                                         </div>
+                                        <ChevronRight className="w-5 h-5 text-primary" />
                                     </CardContent>
                                 </Card>
                             </Link>

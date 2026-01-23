@@ -9,20 +9,42 @@ export type SetCatalogRow = Set & {
   songCount: number
 }
 
-export const getGroupSets = cache(async (groupId: string): Promise<Set[]> => {
+export const getGroupSets = cache(async (groupId: string): Promise<Array<Set & { songCount: number }>> => {
   const supabase = createServerSupabaseClient()
-  const { data, error } = await supabase
+  const { data: sets, error } = await supabase
     .from('sets')
     .select('*')
     .eq('group_id', groupId)
     .order('service_date', { ascending: false })
   
-  if (error) {
+  if (error || !sets) {
     console.error('Error fetching sets:', error)
     return []
   }
+
+  if (sets.length === 0) {
+    return []
+  }
+
+  const setIds = sets.map(s => s.id)
+  const { data: setSongs, error: setSongsError } = await supabase
+    .from('set_songs')
+    .select('set_id')
+    .in('set_id', setIds)
+
+  if (setSongsError) {
+      console.error('Error fetching set songs:', setSongsError)
+  }
+
+  const songCounts = new Map<string, number>()
+  setSongs?.forEach(row => {
+      songCounts.set(row.set_id, (songCounts.get(row.set_id) ?? 0) + 1)
+  })
   
-  return data || []
+  return sets.map(set => ({
+      ...set,
+      songCount: songCounts.get(set.id) ?? 0
+  }))
 })
 
 export const getUpcomingSets = cache(
