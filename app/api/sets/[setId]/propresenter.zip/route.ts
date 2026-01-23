@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import JSZip from 'jszip'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getSongSlides } from '@/lib/actions/song-arrangements'
 
 export const runtime = 'nodejs'
 
@@ -63,24 +64,18 @@ export async function GET(
       const song = setSong.songs
       if (!song) continue
 
-      // Get the best lyrics asset for this song
-      const { data: assets } = await supabase
-        .from('song_assets')
-        .select('extracted_text, extract_status')
-        .eq('song_id', song.id)
-        .eq('asset_type', 'lyrics_source')
-        .eq('extract_status', 'extracted')
-        .order('created_at', { ascending: false })
-        .limit(1)
-
-      const asset = assets?.[0]
+      const { slides } = await getSongSlides(song.id, set.group_id)
+      const lyricsText = slides
+        .map((slide) => slide.lines.join('\n'))
+        .filter((block) => block.trim().length > 0)
+        .join('\n\n')
       const position = String(i + 1).padStart(2, '0')
       const safeTitle = song.title.replace(/[^a-zA-Z0-9\s-]/g, '').trim()
       const filename = `${position} - ${safeTitle}.txt`
 
-      if (asset?.extracted_text) {
+      if (lyricsText) {
         // Add song notes if any
-        let content = asset.extracted_text
+        let content = lyricsText
         if (setSong.notes) {
           content = `[Notes: ${setSong.notes}]\n\n${content}`
         }

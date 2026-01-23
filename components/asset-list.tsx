@@ -72,7 +72,10 @@ export function AssetList({ assets }: AssetListProps) {
                 {asset.original_filename}
               </p>
               <div className="flex items-center gap-2 mt-1">
-                <Badge variant={statusColors[asset.extract_status]} className="text-xs">
+                <Badge
+                  variant={statusColors[asset.extract_status as keyof typeof statusColors] ?? 'secondary'}
+                  className="text-xs"
+                >
                   {asset.extract_status}
                 </Badge>
                 <span className="text-xs text-muted-foreground capitalize">

@@ -804,7 +804,6 @@ async function processFileUpload(
     await supabase
       .from('song_assets')
       .update({
-        extracted_text: null,
         extract_status: 'extracted',
         extract_warning: warning || null,
       })
@@ -1205,7 +1204,6 @@ export async function updateSongAssetText(
   const { error } = await supabase
     .from('song_assets')
     .update({
-      extracted_text: null,
       extract_status: 'extracted',
     })
     .eq('id', assetId)

@@ -50,24 +50,24 @@ interface SongRevisionHistoryCardProps {
 
 function parseSlides(value: unknown): SongSlide[] {
   if (!Array.isArray(value)) return []
-  return value
-    .map((entry) => {
-      if (!entry || typeof entry !== 'object') return null
-      const slide = entry as {
-        id?: string
-        label?: SongSlide['label']
-        customLabel?: string | null
-        lines?: string[]
-      }
-      if (!slide.label || !Array.isArray(slide.lines)) return null
-      return {
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return []
+    const slide = entry as {
+      id?: string
+      label?: SongSlide['label']
+      customLabel?: string | null
+      lines?: string[]
+    }
+    if (!slide.label || !Array.isArray(slide.lines)) return []
+    return [
+      {
         id: slide.id ?? crypto.randomUUID(),
         label: slide.label,
         customLabel: slide.customLabel ?? undefined,
         lines: slide.lines.length > 0 ? slide.lines : [''],
-      }
-    })
-    .filter((entry): entry is SongSlide => Boolean(entry))
+      },
+    ]
+  })
 }
 
 function formatDateTime(value: string) {

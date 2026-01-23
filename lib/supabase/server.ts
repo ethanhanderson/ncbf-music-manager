@@ -46,7 +46,7 @@ export interface SongSlideGroupArrangementItem {
 }
 
 export type SongArrangement = Database['public']['Tables']['song_arrangements']['Row'] & {
-  group_order: string[] | null
+  group_order?: string[] | null
 }
 
 export type SongAsset = Database['public']['Tables']['song_assets']['Row']

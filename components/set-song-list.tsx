@@ -241,7 +241,6 @@ function SortableSongRow({
                   </Link>
                   {(setSong.song_arrangements?.name ||
                     setSong.key_override ||
-                    setSong.songs.notes ||
                     setSong.notes) && (
                     <div className="mt-2">
                       {(setSong.song_arrangements?.name || setSong.key_override) && (
@@ -262,24 +261,14 @@ function SortableSongRow({
                           )}
                         </div>
                       )}
-                      {(setSong.songs.notes || setSong.notes) && (
-                        <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
-                          {setSong.songs.notes && (
-                            <div className="rounded-none border border-border/60 bg-muted/30 px-2.5 py-2">
-                              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Song notes</p>
-                              <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-foreground/80">
-                                {setSong.songs.notes}
-                              </p>
-                            </div>
-                          )}
-                          {setSong.notes && (
-                            <div className="rounded-none border border-border/60 bg-muted/30 px-2.5 py-2">
-                              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Set notes</p>
-                              <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-foreground/80">
-                                {setSong.notes}
-                              </p>
-                            </div>
-                          )}
+                      {setSong.notes && (
+                        <div className="mt-3 text-xs text-muted-foreground">
+                          <div className="rounded-none border border-border/60 bg-muted/30 px-2.5 py-2">
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Set notes</p>
+                            <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-foreground/80">
+                              {setSong.notes}
+                            </p>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -446,23 +435,20 @@ export function SetSongList({ setSongs, setId, groupId, groupSlug }: SetSongList
       if (!over || active.id === over.id) {
         return
       }
-
-      let nextOrder: SetSongWithDetails[] | null = null
-      setOrderedSongs((prev) => {
-        const oldIndex = prev.findIndex((item) => item.id === active.id)
-        const newIndex = prev.findIndex((item) => item.id === over.id)
-        if (oldIndex === -1 || newIndex === -1) {
-          return prev
-        }
-        nextOrder = arrayMove(prev, oldIndex, newIndex)
-        return nextOrder.map((song, index) => ({ ...song, position: index + 1 }))
-      })
-
-      if (nextOrder) {
-        void reorderSetSongs(setId, nextOrder.map((song) => song.id), groupSlug)
+      const oldIndex = orderedSongs.findIndex((item) => item.id === active.id)
+      const newIndex = orderedSongs.findIndex((item) => item.id === over.id)
+      if (oldIndex === -1 || newIndex === -1) {
+        return
       }
+
+      const nextOrder = arrayMove(orderedSongs, oldIndex, newIndex).map((song, index) => ({
+        ...song,
+        position: index + 1,
+      }))
+      setOrderedSongs(nextOrder)
+      void reorderSetSongs(setId, nextOrder.map((song) => song.id), groupSlug)
     },
-    [groupSlug, setId]
+    [groupSlug, orderedSongs, setId]
   )
 
   async function handleRemove(setSongId: string) {

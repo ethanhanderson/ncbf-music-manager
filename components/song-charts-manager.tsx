@@ -332,11 +332,12 @@ export function SongChartsManager({
     return base
   })
   const [chordSettings, setChordSettings] = useState<ChordChartSettings>(() => {
-    const base = { ...DEFAULT_CHORD_SETTINGS, ...existingChartData?.chord }
-    const resolvedLineHeight = base.lineHeight === 'compact' ? 'compact' : 'normal'
+    const base = { ...DEFAULT_CHORD_SETTINGS, ...existingChartData?.chord } as ChordChartSettings
+    const resolvedLineHeight: ChordChartSettings['lineHeight'] =
+      base.lineHeight === 'compact' ? 'compact' : 'normal'
     const legacyTimeSignature = (existingChartData?.chord as { timeSignature?: unknown } | undefined)?.timeSignature
     const resolvedFretShift = normalizeFretShift(base.fretShift ?? legacyTimeSignature)
-    const nextBase = { ...base, lineHeight: resolvedLineHeight, fretShift: resolvedFretShift }
+    const nextBase: ChordChartSettings = { ...base, lineHeight: resolvedLineHeight, fretShift: resolvedFretShift }
     // Use song's default key if no key is set
     if (!nextBase.songKey && songDefaultKey) {
       return { ...nextBase, songKey: songDefaultKey }
@@ -676,7 +677,11 @@ export function SongChartsManager({
                               value={parseKey(vocalSettings.songKey).base || '_none'}
                               onValueChange={(v) => {
                                 const currentAccidental = parseKey(vocalSettings.songKey).accidental
-                                updateVocalSetting('songKey', v === '_none' ? '' : combineKey(v, currentAccidental))
+                                if (!v || v === '_none') {
+                                  updateVocalSetting('songKey', '')
+                                  return
+                                }
+                                updateVocalSetting('songKey', combineKey(v, currentAccidental))
                               }}
                             >
                               <SelectTrigger className="h-8 w-16 text-xs rounded-none border-r-0">
@@ -801,7 +806,11 @@ export function SongChartsManager({
                           type="single"
                           variant="outline"
                           value={String(vocalSettings.columns)}
-                          onValueChange={(v) => v && updateVocalSetting('columns', parseInt(v, 10) as 1 | 2)}
+                          onValueChange={(v) => {
+                            const nextValue = Array.isArray(v) ? v[0] : v
+                            if (!nextValue) return
+                            updateVocalSetting('columns', Number.parseInt(nextValue, 10) as 1 | 2)
+                          }}
                         >
                           <ToggleGroupItem value="1" className="h-8 w-8 text-xs">
                             1
@@ -887,10 +896,14 @@ export function SongChartsManager({
                             <div className="inline-flex w-auto!">
                               <Select
                                 value={parseKey(chordSettings.songKey).base || '_none'}
-                                onValueChange={(v) => {
-                                  const currentAccidental = parseKey(chordSettings.songKey).accidental
-                                  updateChordSetting('songKey', v === '_none' ? '' : combineKey(v, currentAccidental))
-                                }}
+                              onValueChange={(v) => {
+                                const currentAccidental = parseKey(chordSettings.songKey).accidental
+                                if (!v || v === '_none') {
+                                  updateChordSetting('songKey', '')
+                                  return
+                                }
+                                updateChordSetting('songKey', combineKey(v, currentAccidental))
+                              }}
                               >
                                 <SelectTrigger className="h-8 w-16 text-xs rounded-none border-r-0">
                                   <SelectValue>{parseKey(chordSettings.songKey).base || '—'}</SelectValue>
@@ -929,10 +942,14 @@ export function SongChartsManager({
                             <div className="inline-flex w-auto!">
                               <Select
                                 value={parseKey(chordSettings.capoKey).base || '_none'}
-                                onValueChange={(v) => {
-                                  const currentAccidental = parseKey(chordSettings.capoKey).accidental
-                                  updateChordSetting('capoKey', v === '_none' ? '' : combineKey(v, currentAccidental))
-                                }}
+                              onValueChange={(v) => {
+                                const currentAccidental = parseKey(chordSettings.capoKey).accidental
+                                if (!v || v === '_none') {
+                                  updateChordSetting('capoKey', '')
+                                  return
+                                }
+                                updateChordSetting('capoKey', combineKey(v, currentAccidental))
+                              }}
                               >
                                 <SelectTrigger className="h-8 w-16 text-xs rounded-none border-r-0">
                                   <SelectValue>{parseKey(chordSettings.capoKey).base || '—'}</SelectValue>
@@ -1244,7 +1261,11 @@ export function SongChartsManager({
                           value={parseKey(transposeTarget).base || '_none'}
                           onValueChange={(v) => {
                             const currentAccidental = parseKey(transposeTarget).accidental
-                            setTransposeTarget(v === '_none' ? '' : combineKey(v, currentAccidental))
+                            if (!v || v === '_none') {
+                              setTransposeTarget('')
+                              return
+                            }
+                            setTransposeTarget(combineKey(v, currentAccidental))
                           }}
                         >
                           <SelectTrigger className="h-8 w-16 text-xs rounded-none border-r-0">

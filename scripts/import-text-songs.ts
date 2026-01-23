@@ -1,8 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { randomUUID } from 'node:crypto'
+import type { Database } from '../lib/database.types'
 
 type SongSlide = {
   id: string
@@ -236,7 +237,7 @@ function parseSongFile(filePath: string, rawContent: string): ParsedSong {
 }
 
 async function resolveGroupId(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient<Database>,
   groupId: string | undefined,
   groupSlug: string | undefined
 ) {
@@ -277,7 +278,7 @@ async function main() {
     throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY')
   }
 
-  const supabase = createClient(supabaseUrl, supabaseKey, {
+  const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   })
 

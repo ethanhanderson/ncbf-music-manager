@@ -31,7 +31,7 @@ export function RadioCardGroup({
   return (
     <RadioGroup
       value={value}
-      onValueChange={onValueChange}
+      onValueChange={(nextValue) => onValueChange(String(nextValue))}
       className={`grid gap-2 ${columnCount === 3 ? 'grid-cols-3' : columnCount === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}
     >
       {options.map((option) => {

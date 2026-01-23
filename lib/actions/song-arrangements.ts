@@ -875,7 +875,6 @@ export async function createDefaultArrangementsForSongs(
       await supabase
         .from('song_assets')
         .update({
-          extracted_text: null,
           extract_status: 'extracted',
           extract_warning: warning || null,
         })
@@ -894,6 +893,11 @@ export async function createDefaultArrangementsForSongs(
     }
 
     if (!extractedText.trim()) {
+      skipped++
+      continue
+    }
+
+    if (!asset.group_id) {
       skipped++
       continue
     }

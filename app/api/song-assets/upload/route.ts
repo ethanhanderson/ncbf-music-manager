@@ -125,7 +125,6 @@ export async function POST(request: NextRequest) {
       const { error: updateError } = await supabase
         .from('song_assets')
         .update({
-          extracted_text: null,
           extract_status: 'extracted',
           extract_warning: warning || null,
         })

@@ -327,6 +327,63 @@ export type Database = {
           },
         ]
       }
+      song_revisions: {
+        Row: {
+          artist: string | null
+          ccli_id: string | null
+          created_at: string
+          default_key: string | null
+          group_id: string
+          id: string
+          link_url: string | null
+          slide_groups: Json
+          slides: Json
+          song_id: string
+          title: string
+        }
+        Insert: {
+          artist?: string | null
+          ccli_id?: string | null
+          created_at?: string
+          default_key?: string | null
+          group_id: string
+          id?: string
+          link_url?: string | null
+          slide_groups?: Json
+          slides?: Json
+          song_id: string
+          title: string
+        }
+        Update: {
+          artist?: string | null
+          ccli_id?: string | null
+          created_at?: string
+          default_key?: string | null
+          group_id?: string
+          id?: string
+          link_url?: string | null
+          slide_groups?: Json
+          slides?: Json
+          song_id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "song_revisions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "music_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "song_revisions_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       song_slide_groups: {
         Row: {
           created_at: string
@@ -467,63 +524,6 @@ export type Database = {
             columns: ["group_id"]
             isOneToOne: false
             referencedRelation: "music_groups"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      song_revisions: {
-        Row: {
-          artist: string | null
-          ccli_id: string | null
-          created_at: string
-          default_key: string | null
-          group_id: string
-          id: string
-          link_url: string | null
-          slide_groups: Json
-          slides: Json
-          song_id: string
-          title: string
-        }
-        Insert: {
-          artist?: string | null
-          ccli_id?: string | null
-          created_at?: string
-          default_key?: string | null
-          group_id: string
-          id?: string
-          link_url?: string | null
-          slide_groups?: Json
-          slides?: Json
-          song_id: string
-          title: string
-        }
-        Update: {
-          artist?: string | null
-          ccli_id?: string | null
-          created_at?: string
-          default_key?: string | null
-          group_id?: string
-          id?: string
-          link_url?: string | null
-          slide_groups?: Json
-          slides?: Json
-          song_id?: string
-          title?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "song_revisions_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "music_groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "song_revisions_song_id_fkey"
-            columns: ["song_id"]
-            isOneToOne: false
-            referencedRelation: "songs"
             referencedColumns: ["id"]
           },
         ]

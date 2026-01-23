@@ -2,6 +2,7 @@
 
 import { randomUUID } from 'crypto'
 import { createServerSupabaseClient, type Song, type SongSlide, type SongSlideGroup } from '@/lib/supabase/server'
+import type { Json } from '@/lib/database.types'
 import { updateSongArrangementSlides } from '@/lib/actions/song-arrangements'
 
 type SlideGroupSnapshot = {
@@ -95,24 +96,24 @@ export async function getSongRevisions(songId: string, groupId: string) {
 
 function parseSlidesFromRevision(value: unknown): SongSlide[] {
   if (!Array.isArray(value)) return []
-  return value
-    .map((entry) => {
-      if (!entry || typeof entry !== 'object') return null
-      const slide = entry as {
-        id?: string
-        label?: SongSlide['label']
-        customLabel?: string | null
-        lines?: string[]
-      }
-      if (!slide.label || !Array.isArray(slide.lines)) return null
-      return {
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return []
+    const slide = entry as {
+      id?: string
+      label?: SongSlide['label']
+      customLabel?: string | null
+      lines?: string[]
+    }
+    if (!slide.label || !Array.isArray(slide.lines)) return []
+    return [
+      {
         id: slide.id ?? randomUUID(),
         label: slide.label,
         customLabel: slide.customLabel ?? undefined,
         lines: slide.lines.length > 0 ? slide.lines : [''],
-      }
-    })
-    .filter((entry): entry is SongSlide => Boolean(entry))
+      },
+    ]
+  })
 }
 
 export async function createSongRevisionSnapshot(
@@ -145,8 +146,8 @@ export async function createSongRevisionSnapshot(
     ccli_id: song.ccli_id,
     default_key: song.default_key,
     link_url: song.link_url,
-    slides: snapshotSlides as unknown as SongSlide[],
-    slide_groups: snapshotGroups as unknown as SlideGroupSnapshot[],
+    slides: snapshotSlides as unknown as Json,
+    slide_groups: snapshotGroups as unknown as Json,
   })
 
   if (error) {
