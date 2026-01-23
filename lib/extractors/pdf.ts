@@ -1,10 +1,9 @@
-import { PDFParse } from 'pdf-parse'
-
 /**
  * Extract plain text from PDF files
  */
 export async function extractFromPdf(buffer: Buffer): Promise<{ text: string; warning?: string }> {
   try {
+    const { PDFParse } = await import('pdf-parse')
     // Create PDFParse instance with buffer data
     const parser = new PDFParse({
       data: new Uint8Array(buffer),
