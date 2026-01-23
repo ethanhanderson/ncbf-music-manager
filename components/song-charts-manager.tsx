@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect, useCallback } from 'react'
+import dynamic from 'next/dynamic'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -29,8 +30,14 @@ import {
   FieldSeparator,
   FieldSet,
 } from '@/components/ui/field'
-import { VocalChartPreview } from '@/components/charts/vocal-chart-preview'
-import { ChordChartEditor } from '@/components/charts/chord-chart-editor'
+const VocalChartPreview = dynamic(
+  () => import('@/components/charts/vocal-chart-preview').then((mod) => ({ default: mod.VocalChartPreview })),
+  { ssr: false }
+)
+const ChordChartEditor = dynamic(
+  () => import('@/components/charts/chord-chart-editor').then((mod) => ({ default: mod.ChordChartEditor })),
+  { ssr: false }
+)
 import { updateSongArrangementChordsText } from '@/lib/actions/song-arrangements'
 import type { SongArrangement, SongSlide, SongSlideGroupArrangementItem } from '@/lib/supabase/server'
 import { HugeiconsIcon } from '@hugeicons/react'

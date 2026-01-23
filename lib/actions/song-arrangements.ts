@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { cache } from 'react'
 import { randomUUID } from 'crypto'
 import {
   createServerSupabaseClient,
@@ -283,7 +284,7 @@ async function syncArrangementGroups({
   }
 }
 
-export async function getSongArrangements(songId: string, groupId: string): Promise<SongArrangement[]> {
+export const getSongArrangements = cache(async (songId: string, groupId: string): Promise<SongArrangement[]> => {
   const supabase = createServerSupabaseClient()
   const { data: arrangements, error } = await supabase
     .from('song_arrangements')
@@ -317,32 +318,33 @@ export async function getSongArrangements(songId: string, groupId: string): Prom
     ...arrangement,
     group_order: orderMap.get(arrangement.id) ?? [],
   }))
-}
+})
 
-export async function getSongArrangementById(arrangementId: string): Promise<SongArrangement | null> {
+export const getSongArrangementById = cache(async (arrangementId: string): Promise<SongArrangement | null> => {
   const supabase = createServerSupabaseClient()
-  const { data: arrangement, error } = await supabase
-    .from('song_arrangements')
-    .select('*')
-    .eq('id', arrangementId)
-    .single()
+  const [{ data: arrangement, error }, { data: arrangementGroups }] = await Promise.all([
+    supabase
+      .from('song_arrangements')
+      .select('*')
+      .eq('id', arrangementId)
+      .single(),
+    supabase
+      .from('song_arrangement_groups')
+      .select('slide_group_id, position')
+      .eq('arrangement_id', arrangementId)
+      .order('position', { ascending: true }),
+  ])
 
   if (error || !arrangement) {
     console.error('Error fetching song arrangement:', error)
     return null
   }
 
-  const { data: arrangementGroups } = await supabase
-    .from('song_arrangement_groups')
-    .select('slide_group_id, position')
-    .eq('arrangement_id', arrangementId)
-    .order('position', { ascending: true })
-
   return {
     ...arrangement,
     group_order: arrangementGroups?.map((row) => row.slide_group_id) ?? [],
   }
-}
+})
 
 export async function updateSongArrangementOrder(
   arrangementId: string,
@@ -383,17 +385,28 @@ export async function updateSongArrangementOrder(
   return { success: true }
 }
 
-export async function getSongSlides(
+export const getSongSlides = cache(async (
   songId: string,
   groupId: string
-): Promise<{ slides: SongSlide[]; slideGroups: SongSlideGroup[] }> {
+): Promise<{ slides: SongSlide[]; slideGroups: SongSlideGroup[] }> => {
   const supabase = createServerSupabaseClient()
-  const { data: groupRows, error: groupError } = await supabase
-    .from('song_slide_groups')
-    .select('id, label, custom_label, position')
-    .eq('song_id', songId)
-    .eq('group_id', groupId)
-    .order('position', { ascending: true })
+  const [
+    { data: groupRows, error: groupError },
+    { data: slideRows, error: slideError },
+  ] = await Promise.all([
+    supabase
+      .from('song_slide_groups')
+      .select('id, label, custom_label, position')
+      .eq('song_id', songId)
+      .eq('group_id', groupId)
+      .order('position', { ascending: true }),
+    supabase
+      .from('song_slides')
+      .select('id, slide_group_id, lines, position')
+      .eq('song_id', songId)
+      .eq('group_id', groupId)
+      .order('position', { ascending: true }),
+  ])
 
   if (groupError) {
     console.error('Error fetching song slide groups:', groupError)
@@ -404,13 +417,6 @@ export async function getSongSlides(
   if (slideGroups.length === 0) {
     return { slides: [], slideGroups: [] }
   }
-
-  const { data: slideRows, error: slideError } = await supabase
-    .from('song_slides')
-    .select('id, slide_group_id, lines, position')
-    .eq('song_id', songId)
-    .eq('group_id', groupId)
-    .order('position', { ascending: true })
 
   if (slideError) {
     console.error('Error fetching song slides:', slideError)
@@ -440,7 +446,7 @@ export async function getSongSlides(
   })
 
   return { slides, slideGroups }
-}
+})
 
 export async function createSongArrangement(
   songId: string,
@@ -831,84 +837,88 @@ export async function createDefaultArrangementsForSongs(
   let created = 0
   let skipped = 0
 
-  for (const songId of songIds) {
-    const { data: existingArrangement } = await supabase
-      .from('song_arrangements')
-      .select('id')
-      .eq('song_id', songId)
-      .eq('name', 'Default')
-      .single()
+  const results = await Promise.allSettled(
+    songIds.map(async (songId) => {
+      const { data: existingArrangement } = await supabase
+        .from('song_arrangements')
+        .select('id')
+        .eq('song_id', songId)
+        .eq('name', 'Default')
+        .single()
 
-    if (existingArrangement) {
-      skipped++
-      continue
-    }
+      if (existingArrangement) {
+        return { created: false, skipped: true }
+      }
 
-    const { data: asset } = await supabase
-      .from('song_assets')
-      .select('id, group_id, storage_bucket, storage_path, mime_type, original_filename')
-      .eq('song_id', songId)
-      .eq('asset_type', 'lyrics_source')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
-
-    if (!asset) {
-      skipped++
-      continue
-    }
-
-    const { data: fileData, error: downloadError } = await supabase.storage
-      .from(asset.storage_bucket)
-      .download(asset.storage_path)
-
-    if (downloadError || !fileData) {
-      skipped++
-      continue
-    }
-
-    let extractedText = ''
-    try {
-      const buffer = Buffer.from(await fileData.arrayBuffer())
-      const { text, warning } = await extractText(buffer, asset.mime_type, asset.original_filename)
-      extractedText = text
-      await supabase
+      const { data: asset } = await supabase
         .from('song_assets')
-        .update({
-          extract_status: 'extracted',
-          extract_warning: warning || null,
-        })
-        .eq('id', asset.id)
-    } catch (extractError) {
-      const errorMessage = extractError instanceof Error ? extractError.message : 'Unknown extraction error'
-      await supabase
-        .from('song_assets')
-        .update({
-          extract_status: 'failed',
-          extract_warning: errorMessage,
-        })
-        .eq('id', asset.id)
-      skipped++
-      continue
-    }
+        .select('id, group_id, storage_bucket, storage_path, mime_type, original_filename')
+        .eq('song_id', songId)
+        .eq('asset_type', 'lyrics_source')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
 
-    if (!extractedText.trim()) {
-      skipped++
-      continue
-    }
+      if (!asset) {
+        return { created: false, skipped: true }
+      }
 
-    if (!asset.group_id) {
-      skipped++
-      continue
-    }
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from(asset.storage_bucket)
+        .download(asset.storage_path)
 
-    const result = await createDefaultArrangementFromLyrics(songId, asset.group_id, extractedText)
-    if (result.success) {
-      created++
-    } else {
-      skipped++
+      if (downloadError || !fileData) {
+        return { created: false, skipped: true }
+      }
+
+      let extractedText = ''
+      try {
+        const buffer = Buffer.from(await fileData.arrayBuffer())
+        const { text, warning } = await extractText(buffer, asset.mime_type, asset.original_filename)
+        extractedText = text
+        await supabase
+          .from('song_assets')
+          .update({
+            extract_status: 'extracted',
+            extract_warning: warning || null,
+          })
+          .eq('id', asset.id)
+      } catch (extractError) {
+        const errorMessage = extractError instanceof Error ? extractError.message : 'Unknown extraction error'
+        await supabase
+          .from('song_assets')
+          .update({
+            extract_status: 'failed',
+            extract_warning: errorMessage,
+          })
+          .eq('id', asset.id)
+        return { created: false, skipped: true }
+      }
+
+      if (!extractedText.trim()) {
+        return { created: false, skipped: true }
+      }
+
+      if (!asset.group_id) {
+        return { created: false, skipped: true }
+      }
+
+      const result = await createDefaultArrangementFromLyrics(songId, asset.group_id, extractedText)
+      return { created: result.success, skipped: !result.success }
+    })
+  )
+
+  results.forEach((result) => {
+    if (result.status === 'fulfilled') {
+      if (result.value.created) {
+        created++
+      } else if (result.value.skipped) {
+        skipped++
+      }
+      return
     }
-  }
+    skipped++
+  })
 
   revalidatePath(`/groups/${groupSlug}/songs`)
   revalidatePath('/songs')

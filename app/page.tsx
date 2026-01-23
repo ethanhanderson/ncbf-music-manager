@@ -1,16 +1,12 @@
-export const dynamic = 'force-dynamic'
+export const revalidate = 60
 
 import Link from 'next/link'
-import dynamic from 'next/dynamic'
 import { getGroupsWithCounts } from '@/lib/actions/groups'
-import { getSetById, getUpcomingSets } from '@/lib/actions/sets'
+import { getUpcomingSetWithSongs, getUpcomingSets } from '@/lib/actions/sets'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-const CreateSetDialog = dynamic(
-  () => import('@/components/create-set-dialog').then((mod) => ({ default: mod.CreateSetDialog })),
-  { ssr: false }
-)
+import { CreateSetDialogClient } from '@/components/create-set-dialog-client'
 import { AppLogo } from '@/components/app-logo'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
@@ -21,12 +17,11 @@ import {
 } from '@hugeicons/core-free-icons'
 
 export default async function HomePage() {
-  const [groups, upcomingSets] = await Promise.all([
+  const [groups, upcomingSets, upcomingSet] = await Promise.all([
     getGroupsWithCounts(),
     getUpcomingSets(5),
+    getUpcomingSetWithSongs(),
   ])
-  const upcomingSetSummary = upcomingSets[0]
-  const upcomingSet = upcomingSetSummary ? await getSetById(upcomingSetSummary.id) : null
 
   const totals = groups.reduce(
     (acc, group) => ({
@@ -147,7 +142,7 @@ export default async function HomePage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-wrap items-center gap-3">
-                  <CreateSetDialog
+                  <CreateSetDialogClient
                     groups={groups.map((group) => ({
                       id: group.id,
                       name: group.name,

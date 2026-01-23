@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { cache } from 'react'
 import { createServerSupabaseClient, type MusicGroup } from '@/lib/supabase/server'
 
 export type MusicGroupWithCounts = MusicGroup & {
@@ -8,7 +9,7 @@ export type MusicGroupWithCounts = MusicGroup & {
   songCount: number
 }
 
-export async function getGroups(): Promise<MusicGroup[]> {
+export const getGroups = cache(async (): Promise<MusicGroup[]> => {
   const supabase = createServerSupabaseClient()
   const { data, error } = await supabase
     .from('music_groups')
@@ -21,9 +22,9 @@ export async function getGroups(): Promise<MusicGroup[]> {
   }
   
   return data || []
-}
+})
 
-export async function getGroupsWithCounts(): Promise<MusicGroupWithCounts[]> {
+export const getGroupsWithCounts = cache(async (): Promise<MusicGroupWithCounts[]> => {
   const supabase = createServerSupabaseClient()
   const { data: groups, error } = await supabase
     .from('music_groups')
@@ -63,9 +64,9 @@ export async function getGroupsWithCounts(): Promise<MusicGroupWithCounts[]> {
     setCount: setCounts.get(group.id) ?? 0,
     songCount: songCounts.get(group.id) ?? 0,
   }))
-}
+})
 
-export async function getGroupBySlug(slug: string): Promise<MusicGroup | null> {
+export const getGroupBySlug = cache(async (slug: string): Promise<MusicGroup | null> => {
   const supabase = createServerSupabaseClient()
   const { data, error } = await supabase
     .from('music_groups')
@@ -78,7 +79,7 @@ export async function getGroupBySlug(slug: string): Promise<MusicGroup | null> {
   }
   
   return data
-}
+})
 
 export async function createGroup(formData: FormData): Promise<{ success: boolean; error?: string; group?: MusicGroup }> {
   const name = formData.get('name') as string

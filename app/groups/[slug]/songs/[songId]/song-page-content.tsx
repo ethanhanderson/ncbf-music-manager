@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import dynamic from 'next/dynamic'
 import { notFound } from 'next/navigation'
 import { getGroupBySlug } from '@/lib/actions/groups'
 import { getSongById, getSongUsageInfo } from '@/lib/actions/songs'
@@ -9,13 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { EditSongDialog } from '@/components/edit-song-dialog'
 import { DeleteSongButton } from '@/components/delete-song-button'
-const SongSlideArrangements = dynamic(
-  () =>
-    import('@/components/song-slide-arrangements').then((mod) => ({
-      default: mod.SongSlideArrangements,
-    })),
-  { ssr: false }
-)
+import { SongSlideArrangementsClient } from '@/components/song-slide-arrangements-client'
 import { SongRevisionHistoryCard } from '@/components/song-revision-history-card'
 import {
   Breadcrumb,
@@ -140,7 +133,7 @@ export default async function SongPageContent({ params }: SongPageContentProps) 
       <main className="mx-auto max-w-6xl px-4 py-8">
         <div className="grid gap-8 lg:grid-cols-3">
           <section className="space-y-6 lg:col-span-2">
-            <SongSlideArrangements
+            <SongSlideArrangementsClient
               songId={song.id}
               groupId={group.id}
               groupSlug={slug}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Ref } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ButtonGroup } from '@/components/ui/button-group'
@@ -158,7 +158,7 @@ function TruncatedSongTitle({ title }: { title: string }) {
   )
 }
 
-function SortableSongRow({
+const SortableSongRow = memo(function SortableSongRow({
   setSong,
   arrangements,
   groupSlug,
@@ -179,13 +179,15 @@ function SortableSongRow({
   isLoadingArrangements: boolean
   onOpenArrangements: () => void
 }) {
-  const arrangementLabel = isLoadingArrangements
-    ? 'Loading...'
-    : setSong.arrangement_id
-      ? arrangements.find((arrangement) => arrangement.id === setSong.arrangement_id)?.name ??
-        setSong.song_arrangements?.name ??
-        'Unknown arrangement'
-      : 'No arrangement'
+  const arrangementLabel = useMemo(() => {
+    if (isLoadingArrangements) return 'Loading...'
+    if (!setSong.arrangement_id) return 'No arrangement'
+    return (
+      arrangements.find((arrangement) => arrangement.id === setSong.arrangement_id)?.name ??
+      setSong.song_arrangements?.name ??
+      'Unknown arrangement'
+    )
+  }, [arrangements, isLoadingArrangements, setSong.arrangement_id, setSong.song_arrangements?.name])
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
     useSortable({ id: setSong.id })
   const [notesDraft, setNotesDraft] = useState(setSong.notes ?? '')
@@ -411,7 +413,7 @@ function SortableSongRow({
       </div>
     </div>
   )
-}
+})
 
 export function SetSongList({ setSongs, setId, groupId, groupSlug }: SetSongListProps) {
   const [orderedSongs, setOrderedSongs] = useState(setSongs)

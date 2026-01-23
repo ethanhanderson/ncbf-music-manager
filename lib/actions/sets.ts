@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { cache } from 'react'
 import { createServerSupabaseClient, type Set, type SetWithSongs } from '@/lib/supabase/server'
 
 export type SetCatalogRow = Set & {
@@ -8,7 +9,7 @@ export type SetCatalogRow = Set & {
   songCount: number
 }
 
-export async function getGroupSets(groupId: string): Promise<Set[]> {
+export const getGroupSets = cache(async (groupId: string): Promise<Set[]> => {
   const supabase = createServerSupabaseClient()
   const { data, error } = await supabase
     .from('sets')
@@ -22,32 +23,66 @@ export async function getGroupSets(groupId: string): Promise<Set[]> {
   }
   
   return data || []
-}
+})
 
-export async function getUpcomingSets(limit = 10): Promise<(Set & { music_groups: { name: string; slug: string } })[]> {
+export const getUpcomingSets = cache(
+  async (limit = 10): Promise<(Set & { music_groups: { name: string; slug: string } })[]> => {
+    const supabase = createServerSupabaseClient()
+    const today = new Date().toISOString().split('T')[0]
+    
+    const { data, error } = await supabase
+      .from('sets')
+      .select('*, music_groups(name, slug)')
+      .gte('service_date', today)
+      .order('service_date', { ascending: true })
+      .limit(limit)
+    
+    if (error) {
+      console.error('Error fetching upcoming sets:', error)
+      return []
+    }
+    
+    return data || []
+  }
+)
+
+export const getUpcomingSetWithSongs = cache(async (): Promise<SetWithSongs | null> => {
   const supabase = createServerSupabaseClient()
   const today = new Date().toISOString().split('T')[0]
-  
+
   const { data, error } = await supabase
     .from('sets')
-    .select('*, music_groups(name, slug)')
+    .select(`
+      *,
+      music_groups(*),
+      set_songs(
+        *,
+        songs(*),
+        song_arrangements(*)
+      )
+    `)
     .gte('service_date', today)
     .order('service_date', { ascending: true })
-    .limit(limit)
-  
-  if (error) {
-    console.error('Error fetching upcoming sets:', error)
-    return []
-  }
-  
-  return data || []
-}
+    .limit(1)
 
-export async function getAllSetsWithGroups({
+  if (error) {
+    console.error('Error fetching upcoming set:', error)
+    return null
+  }
+
+  const set = data?.[0] ?? null
+  if (set?.set_songs) {
+    set.set_songs.sort((a: { position: number }, b: { position: number }) => a.position - b.position)
+  }
+
+  return set
+})
+
+export const getAllSetsWithGroups = cache(async ({
   groupIds,
 }: {
   groupIds?: string[]
-} = {}): Promise<SetCatalogRow[]> {
+} = {}): Promise<SetCatalogRow[]> => {
   const supabase = createServerSupabaseClient()
   let query = supabase
     .from('sets')
@@ -58,7 +93,18 @@ export async function getAllSetsWithGroups({
     query = query.in('group_id', groupIds)
   }
 
-  const { data: sets, error } = await query
+  let setSongsQuery = supabase
+    .from('set_songs')
+    .select('set_id, sets!inner(group_id)')
+
+  if (groupIds?.length) {
+    setSongsQuery = setSongsQuery.in('sets.group_id', groupIds)
+  }
+
+  const [{ data: sets, error }, { data: setSongs, error: setSongsError }] = await Promise.all([
+    query,
+    setSongsQuery,
+  ])
 
   if (error || !sets) {
     console.error('Error fetching sets catalog:', error)
@@ -68,12 +114,6 @@ export async function getAllSetsWithGroups({
   if (sets.length === 0) {
     return []
   }
-
-  const setIds = sets.map((set) => set.id)
-  const { data: setSongs, error: setSongsError } = await supabase
-    .from('set_songs')
-    .select('set_id')
-    .in('set_id', setIds)
 
   if (setSongsError) {
     console.error('Error fetching set song counts:', setSongsError)
@@ -89,9 +129,9 @@ export async function getAllSetsWithGroups({
     ...(set as Set & { music_groups: { name: string; slug: string } | null }),
     songCount: songCounts.get(set.id) ?? 0,
   }))
-}
+})
 
-export async function getUpcomingSetSongIds(groupId: string): Promise<string[]> {
+export const getUpcomingSetSongIds = cache(async (groupId: string): Promise<string[]> => {
   const supabase = createServerSupabaseClient()
   const today = new Date().toISOString().split('T')[0]
 
@@ -114,9 +154,9 @@ export async function getUpcomingSetSongIds(groupId: string): Promise<string[]> 
   })
 
   return Array.from(songIds)
-}
+})
 
-export async function getSetById(setId: string): Promise<SetWithSongs | null> {
+export const getSetById = cache(async (setId: string): Promise<SetWithSongs | null> => {
   const supabase = createServerSupabaseClient()
   const { data, error } = await supabase
     .from('sets')
@@ -148,7 +188,7 @@ export async function getSetById(setId: string): Promise<SetWithSongs | null> {
   }
   
   return data
-}
+})
 
 export async function createSet(
   groupId: string,

@@ -1,7 +1,6 @@
-export const dynamic = 'force-dynamic'
+export const revalidate = 60
 
 import Link from 'next/link'
-import dynamic from 'next/dynamic'
 import { notFound } from 'next/navigation'
 import { getGroupBySlug } from '@/lib/actions/groups'
 import { getGroupSets, getUpcomingSetSongIds } from '@/lib/actions/sets'
@@ -9,10 +8,7 @@ import { getRecentSongs, getSongsWithArrangements } from '@/lib/actions/songs'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-const CreateSetDialog = dynamic(
-  () => import('@/components/create-set-dialog').then((mod) => ({ default: mod.CreateSetDialog })),
-  { ssr: false }
-)
+import { CreateSetDialogClient } from '@/components/create-set-dialog-client'
 import { CreateSongDialog } from '@/components/create-song-dialog'
 import { BulkUploadDialog } from '@/components/bulk-upload-dialog'
 import { RenameGroupPopover } from '@/components/rename-group-popover'
@@ -102,7 +98,7 @@ export default async function GroupPage({ params }: GroupPageProps) {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {/* Create Set */}
-            <CreateSetDialog 
+            <CreateSetDialogClient 
               groupId={group.id} 
               groupSlug={group.slug} 
               songs={songs}

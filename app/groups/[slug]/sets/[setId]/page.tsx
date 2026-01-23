@@ -1,16 +1,12 @@
 export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
-import dynamic from 'next/dynamic'
 import { notFound } from 'next/navigation'
 import { getSetById } from '@/lib/actions/sets'
 import { getGroupBySlug } from '@/lib/actions/groups'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-const SetSongList = dynamic(
-  () => import('@/components/set-song-list').then((mod) => ({ default: mod.SetSongList })),
-  { ssr: false }
-)
+import { SetSongListClient } from '@/components/set-song-list-client'
 import { AddSongToSet } from '@/components/add-song-to-set'
 import { EditSetDialog } from '@/components/edit-set-dialog'
 import { DeleteSetButton } from '@/components/delete-set-button'
@@ -125,7 +121,7 @@ export default async function SetPage({ params }: SetPageProps) {
                     <p className="text-muted-foreground text-sm mt-1">Add songs to build your setlist.</p>
                   </div>
                 ) : (
-                  <SetSongList
+                  <SetSongListClient
                     setSongs={set.set_songs}
                     setId={set.id}
                     groupId={set.group_id}

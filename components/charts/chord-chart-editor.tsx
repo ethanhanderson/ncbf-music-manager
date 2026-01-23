@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
+import { memo, useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/components/ui/input-group'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -730,7 +730,7 @@ interface ChordLineProps {
   nextMarkerNumber: number
 }
 
-function ChordLine({
+const ChordLine = memo(function ChordLine({
   slideId,
   lineIndex,
   line,
@@ -1446,4 +1446,4 @@ function ChordLine({
       </div>
     </div>
   )
-}
+})

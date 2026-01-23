@@ -1,6 +1,7 @@
 'use server'
 
 import { randomUUID } from 'crypto'
+import { cache } from 'react'
 import { createServerSupabaseClient, type Song, type SongSlide, type SongSlideGroup } from '@/lib/supabase/server'
 import type { Json } from '@/lib/database.types'
 import { updateSongArrangementSlides } from '@/lib/actions/song-arrangements'
@@ -77,7 +78,7 @@ async function fetchSongSnapshot(
   return { song, slides, slideGroups }
 }
 
-export async function getSongRevisions(songId: string, groupId: string) {
+export const getSongRevisions = cache(async (songId: string, groupId: string) => {
   const supabase = createServerSupabaseClient()
   const { data, error } = await supabase
     .from('song_revisions')
@@ -92,7 +93,7 @@ export async function getSongRevisions(songId: string, groupId: string) {
   }
 
   return data || []
-}
+})
 
 function parseSlidesFromRevision(value: unknown): SongSlide[] {
   if (!Array.isArray(value)) return []

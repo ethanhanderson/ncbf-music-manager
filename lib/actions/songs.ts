@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { cache } from 'react'
 import {
   createServerSupabaseClient,
   type MusicGroup,
@@ -137,11 +138,11 @@ async function getSlidesTextBySongIds(
 /**
  * Check if a song with the same title (and optionally lyrics) already exists
  */
-export async function checkForDuplicateSong(
+export const checkForDuplicateSong = cache(async (
   groupId: string,
   title: string,
   lyrics?: string
-): Promise<DuplicateCheckResult> {
+): Promise<DuplicateCheckResult> => {
   const supabase = createServerSupabaseClient()
   
   // Normalize title for comparison
@@ -197,15 +198,15 @@ export async function checkForDuplicateSong(
     existingSong: titleMatches[0],
     matchType: 'title',
   }
-}
+})
 
 /**
  * Check if lyrics are a duplicate of ANY song in this group (even if title differs).
  */
-export async function checkForDuplicateLyrics(
+export const checkForDuplicateLyrics = cache(async (
   groupId: string,
   lyrics: string
-): Promise<DuplicateCheckResult> {
+): Promise<DuplicateCheckResult> => {
   const supabase = createServerSupabaseClient()
 
   const text = lyrics?.trim()
@@ -233,7 +234,7 @@ export async function checkForDuplicateLyrics(
   }
 
   return { isDuplicate: false }
-}
+})
 
 /**
  * Extract text from a file without creating a song.
@@ -263,7 +264,7 @@ export async function extractTextFromFile(
   }
 }
 
-export async function getSongs(groupId: string, search?: string): Promise<Song[]> {
+export const getSongs = cache(async (groupId: string, search?: string): Promise<Song[]> => {
   const supabase = createServerSupabaseClient()
   let query = supabase
     .from('songs')
@@ -283,13 +284,13 @@ export async function getSongs(groupId: string, search?: string): Promise<Song[]
   }
 
   return data || []
-}
+})
 
 export type SongArrangementSummary = Pick<SongArrangement, 'id' | 'song_id' | 'name'>
 
-export async function getSongsWithArrangements(
+export const getSongsWithArrangements = cache(async (
   groupId: string
-): Promise<{ songs: Song[]; arrangements: SongArrangementSummary[] }> {
+): Promise<{ songs: Song[]; arrangements: SongArrangementSummary[] }> => {
   const supabase = createServerSupabaseClient()
   const { data: songs, error: songsError } = await supabase
     .from('songs')
@@ -319,7 +320,7 @@ export async function getSongsWithArrangements(
   }
 
   return { songs, arrangements: (arrangements as SongArrangementSummary[]) || [] }
-}
+})
 
 function buildSongStats(
   songs: Song[],
@@ -349,10 +350,10 @@ function buildSongStats(
   return stats
 }
 
-export async function getSongsWithStats(
+export const getSongsWithStats = cache(async (
   groupId: string,
   search?: string
-): Promise<Array<Song & SongListStats>> {
+): Promise<Array<Song & SongListStats>> => {
   const supabase = createServerSupabaseClient()
   let query = supabase
     .from('songs')
@@ -399,11 +400,11 @@ export async function getSongsWithStats(
     ...song,
     ...stats[song.id],
   }))
-}
+})
 
-export async function getSongsWithArrangementsAndStats(
+export const getSongsWithArrangementsAndStats = cache(async (
   groupId: string
-): Promise<{ songs: Array<Song & SongListStats>; arrangements: SongArrangementSummary[] }> {
+): Promise<{ songs: Array<Song & SongListStats>; arrangements: SongArrangementSummary[] }> => {
   const supabase = createServerSupabaseClient()
   const { data: songs, error: songsError } = await supabase
     .from('songs')
@@ -447,9 +448,9 @@ export async function getSongsWithArrangementsAndStats(
     })),
     arrangements: (arrangements as SongArrangementSummary[]) || [],
   }
-}
+})
 
-export async function getRecentSongs(groupId: string, limit: number = 5): Promise<Song[]> {
+export const getRecentSongs = cache(async (groupId: string, limit: number = 5): Promise<Song[]> => {
   const supabase = createServerSupabaseClient()
   const { data, error } = await supabase
     .from('songs')
@@ -464,12 +465,12 @@ export async function getRecentSongs(groupId: string, limit: number = 5): Promis
   }
 
   return data || []
-}
+})
 
-export async function getAllSongsWithGroups(options: {
+export const getAllSongsWithGroups = cache(async (options: {
   search?: string
   groupIds?: string[]
-} = {}): Promise<SongWithGroup[]> {
+} = {}): Promise<SongWithGroup[]> => {
   const supabase = createServerSupabaseClient()
   const term = options.search?.trim()
 
@@ -494,12 +495,12 @@ export async function getAllSongsWithGroups(options: {
   }
 
   return (data as SongWithGroup[]) || []
-}
+})
 
-export async function getAllSongsWithGroupsWithStats(options: {
+export const getAllSongsWithGroupsWithStats = cache(async (options: {
   search?: string
   groupIds?: string[]
-} = {}): Promise<Array<SongWithGroup & SongListStats>> {
+} = {}): Promise<Array<SongWithGroup & SongListStats>> => {
   const supabase = createServerSupabaseClient()
   const term = options.search?.trim()
 
@@ -558,9 +559,9 @@ export async function getAllSongsWithGroupsWithStats(options: {
     ...song,
     ...stats[song.id],
   }))
-}
+})
 
-export async function getSongById(id: string, groupId: string): Promise<Song | null> {
+export const getSongById = cache(async (id: string, groupId: string): Promise<Song | null> => {
   const supabase = createServerSupabaseClient()
   const { data, error } = await supabase
     .from('songs')
@@ -574,9 +575,9 @@ export async function getSongById(id: string, groupId: string): Promise<Song | n
   }
 
   return data
-}
+})
 
-export async function getSongAssets(songId: string): Promise<SongAsset[]> {
+export const getSongAssets = cache(async (songId: string): Promise<SongAsset[]> => {
   const supabase = createServerSupabaseClient()
   const { data, error } = await supabase
     .from('song_assets')
@@ -590,7 +591,7 @@ export async function getSongAssets(songId: string): Promise<SongAsset[]> {
   }
 
   return data || []
-}
+})
 
 export async function createSong(
   groupId: string,
@@ -921,60 +922,64 @@ export interface SongUsageInfo {
   arrangementCounts: Array<{ arrangementId: string | null; count: number }>
 }
 
-export async function getSongUsageInfo(songId: string, groupId: string): Promise<SongUsageInfo> {
+export const getSongUsageInfo = cache(async (songId: string, groupId: string): Promise<SongUsageInfo> => {
   const supabase = createServerSupabaseClient()
   const today = new Date().toISOString().split('T')[0]
 
-  const { count: totalUses, error: totalError } = await supabase
-    .from('set_songs')
-    .select('id, sets!inner(group_id)', { count: 'exact', head: true })
-    .eq('song_id', songId)
-    .eq('sets.group_id', groupId)
+  const [
+    { count: totalUses, error: totalError },
+    { count: upcomingUses, error: upcomingError },
+    { data: firstSet, error: firstError },
+    { data: lastSet, error: lastError },
+    { data: arrangementRows, error: arrangementError },
+  ] = await Promise.all([
+    supabase
+      .from('set_songs')
+      .select('id, sets!inner(group_id)', { count: 'exact', head: true })
+      .eq('song_id', songId)
+      .eq('sets.group_id', groupId),
+    supabase
+      .from('set_songs')
+      .select('id, sets!inner(service_date, group_id)', { count: 'exact', head: true })
+      .eq('song_id', songId)
+      .eq('sets.group_id', groupId)
+      .gte('sets.service_date', today),
+    supabase
+      .from('sets')
+      .select('service_date, set_songs!inner(song_id)')
+      .eq('group_id', groupId)
+      .eq('set_songs.song_id', songId)
+      .order('service_date', { ascending: true })
+      .limit(1),
+    supabase
+      .from('sets')
+      .select('service_date, set_songs!inner(song_id)')
+      .eq('group_id', groupId)
+      .eq('set_songs.song_id', songId)
+      .order('service_date', { ascending: false })
+      .limit(1),
+    supabase
+      .from('set_songs')
+      .select('arrangement_id, sets!inner(group_id)')
+      .eq('song_id', songId)
+      .eq('sets.group_id', groupId),
+  ])
 
   if (totalError) {
     console.error('Error fetching song usage count:', totalError)
   }
 
-  const { count: upcomingUses, error: upcomingError } = await supabase
-    .from('set_songs')
-    .select('id, sets!inner(service_date, group_id)', { count: 'exact', head: true })
-    .eq('song_id', songId)
-    .eq('sets.group_id', groupId)
-    .gte('sets.service_date', today)
-
   if (upcomingError) {
     console.error('Error fetching song upcoming usage count:', upcomingError)
   }
-
-  const { data: firstSet, error: firstError } = await supabase
-    .from('sets')
-    .select('service_date, set_songs!inner(song_id)')
-    .eq('group_id', groupId)
-    .eq('set_songs.song_id', songId)
-    .order('service_date', { ascending: true })
-    .limit(1)
 
   if (firstError) {
     console.error('Error fetching song first used date:', firstError)
   }
 
-  const { data: lastSet, error: lastError } = await supabase
-    .from('sets')
-    .select('service_date, set_songs!inner(song_id)')
-    .eq('group_id', groupId)
-    .eq('set_songs.song_id', songId)
-    .order('service_date', { ascending: false })
-    .limit(1)
-
   if (lastError) {
     console.error('Error fetching song last used date:', lastError)
   }
-
-  const { data: arrangementRows, error: arrangementError } = await supabase
-    .from('set_songs')
-    .select('arrangement_id, sets!inner(group_id)')
-    .eq('song_id', songId)
-    .eq('sets.group_id', groupId)
 
   if (arrangementError) {
     console.error('Error fetching song arrangement usage:', arrangementError)
@@ -997,7 +1002,7 @@ export async function getSongUsageInfo(songId: string, groupId: string): Promise
     lastUsedDate: lastSet?.[0]?.service_date ?? null,
     arrangementCounts,
   }
-}
+})
 
 /**
  * Creates a single song from a file upload, or overrides an existing song.

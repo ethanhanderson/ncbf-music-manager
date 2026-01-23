@@ -172,102 +172,107 @@ export const useFileUpload = (
       if (!newFiles || newFiles.length === 0) return;
 
       const newFilesArray = Array.from(newFiles);
-      const errors: string[] = [];
+      setState((prev) => {
+        const errors: string[] = [];
+        let existingFiles = prev.files;
 
-      // Clear existing errors when new files are uploaded
-      setState((prev) => ({ ...prev, errors: [] }));
+        // Clear existing files in single-file mode.
+        if (!multiple && existingFiles.length > 0) {
+          for (const file of existingFiles) {
+            if (
+              file.preview &&
+              file.file instanceof File &&
+              file.file.type.startsWith("image/")
+            ) {
+              URL.revokeObjectURL(file.preview);
+            }
+          }
+          existingFiles = [];
+        }
 
-      // In single file mode, clear existing files first
-      if (!multiple) {
-        clearFiles();
-      }
+        if (
+          multiple &&
+          maxFiles !== Number.POSITIVE_INFINITY &&
+          existingFiles.length + newFilesArray.length > maxFiles
+        ) {
+          errors.push(`You can only upload a maximum of ${maxFiles} files.`);
+          return {
+            ...prev,
+            errors,
+          };
+        }
 
-      // Check if adding these files would exceed maxFiles (only in multiple mode)
-      if (
-        multiple &&
-        maxFiles !== Number.POSITIVE_INFINITY &&
-        state.files.length + newFilesArray.length > maxFiles
-      ) {
-        errors.push(`You can only upload a maximum of ${maxFiles} files.`);
-        setState((prev) => ({ ...prev, errors }));
-        return;
-      }
-
-      const validFiles: FileWithPreview[] = [];
-
-      for (const file of newFilesArray) {
-        if (multiple) {
-          const isDuplicate = state.files.some(
+        const validFiles: FileWithPreview[] = [];
+        const isDuplicate = (file: File | FileMetadata) =>
+          existingFiles.some(
+            (existingFile) =>
+              existingFile.file.name === file.name &&
+              existingFile.file.size === file.size,
+          ) ||
+          validFiles.some(
             (existingFile) =>
               existingFile.file.name === file.name &&
               existingFile.file.size === file.size,
           );
 
-          if (isDuplicate) {
+        for (const file of newFilesArray) {
+          if (multiple && isDuplicate(file)) {
             continue;
           }
+
+          if (file.size > maxSize) {
+            errors.push(
+              multiple
+                ? `Some files exceed the maximum size of ${formatBytes(maxSize)}.`
+                : `File exceeds the maximum size of ${formatBytes(maxSize)}.`,
+            );
+            continue;
+          }
+
+          const error = validateFile(file);
+
+          if (error) {
+            errors.push(error);
+            continue;
+          }
+
+          validFiles.push({
+            file,
+            id: generateUniqueId(file),
+            preview: createPreview(file),
+          });
         }
 
-        if (file.size > maxSize) {
-          errors.push(
-            multiple
-              ? `Some files exceed the maximum size of ${formatBytes(maxSize)}.`
-              : `File exceeds the maximum size of ${formatBytes(maxSize)}.`,
-          );
-          continue;
+        if (validFiles.length > 0) {
+          onFilesAdded?.(validFiles);
         }
 
-        const error = validateFile(file);
+        const nextFiles = !multiple
+          ? validFiles
+          : [...existingFiles, ...validFiles];
 
-        if (error) {
-          errors.push(error);
-          continue;
+        if (validFiles.length > 0 || errors.length > 0) {
+          onFilesChange?.(nextFiles);
         }
 
-        validFiles.push({
-          file,
-          id: generateUniqueId(file),
-          preview: createPreview(file),
-        });
-      }
-
-      // Only update state if we have valid files to add
-      if (validFiles.length > 0) {
-        // Call the onFilesAdded callback with the newly added valid files
-        onFilesAdded?.(validFiles);
-
-        setState((prev) => {
-          const newFiles = !multiple
-            ? validFiles
-            : [...prev.files, ...validFiles];
-          onFilesChange?.(newFiles);
-          return {
-            ...prev,
-            errors,
-            files: newFiles,
-          };
-        });
-      } else if (errors.length > 0) {
-        setState((prev) => ({
+        return {
           ...prev,
           errors,
-        }));
-      }
+          files: validFiles.length > 0 ? nextFiles : existingFiles,
+        };
+      });
 
-      // Reset input value after handling files
       if (inputRef.current) {
         inputRef.current.value = "";
       }
     },
     [
-      state.files,
       maxFiles,
       multiple,
       maxSize,
       validateFile,
       createPreview,
       generateUniqueId,
-      clearFiles,
       onFilesChange,
       onFilesAdded,
     ],
