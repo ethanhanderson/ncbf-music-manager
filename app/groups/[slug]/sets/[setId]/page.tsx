@@ -1,12 +1,16 @@
 export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { notFound } from 'next/navigation'
 import { getSetById } from '@/lib/actions/sets'
 import { getGroupBySlug } from '@/lib/actions/groups'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { SetSongList } from '@/components/set-song-list'
+const SetSongList = dynamic(
+  () => import('@/components/set-song-list').then((mod) => ({ default: mod.SetSongList })),
+  { ssr: false }
+)
 import { AddSongToSet } from '@/components/add-song-to-set'
 import { EditSetDialog } from '@/components/edit-set-dialog'
 import { DeleteSetButton } from '@/components/delete-set-button'

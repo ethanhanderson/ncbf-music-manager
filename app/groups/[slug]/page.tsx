@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { notFound } from 'next/navigation'
 import { getGroupBySlug } from '@/lib/actions/groups'
 import { getGroupSets, getUpcomingSetSongIds } from '@/lib/actions/sets'
@@ -8,7 +9,10 @@ import { getRecentSongs, getSongsWithArrangements } from '@/lib/actions/songs'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { CreateSetDialog } from '@/components/create-set-dialog'
+const CreateSetDialog = dynamic(
+  () => import('@/components/create-set-dialog').then((mod) => ({ default: mod.CreateSetDialog })),
+  { ssr: false }
+)
 import { CreateSongDialog } from '@/components/create-song-dialog'
 import { BulkUploadDialog } from '@/components/bulk-upload-dialog'
 import { RenameGroupPopover } from '@/components/rename-group-popover'

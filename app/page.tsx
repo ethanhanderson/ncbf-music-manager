@@ -1,12 +1,16 @@
 export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { getGroupsWithCounts } from '@/lib/actions/groups'
 import { getSetById, getUpcomingSets } from '@/lib/actions/sets'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { CreateSetDialog } from '@/components/create-set-dialog'
+const CreateSetDialog = dynamic(
+  () => import('@/components/create-set-dialog').then((mod) => ({ default: mod.CreateSetDialog })),
+  { ssr: false }
+)
 import { AppLogo } from '@/components/app-logo'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {

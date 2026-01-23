@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { notFound } from 'next/navigation'
 import { getGroupBySlug } from '@/lib/actions/groups'
 import { getSongById, getSongUsageInfo } from '@/lib/actions/songs'
@@ -8,7 +9,13 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { EditSongDialog } from '@/components/edit-song-dialog'
 import { DeleteSongButton } from '@/components/delete-song-button'
-import { SongSlideArrangements } from '@/components/song-slide-arrangements'
+const SongSlideArrangements = dynamic(
+  () =>
+    import('@/components/song-slide-arrangements').then((mod) => ({
+      default: mod.SongSlideArrangements,
+    })),
+  { ssr: false }
+)
 import { SongRevisionHistoryCard } from '@/components/song-revision-history-card'
 import {
   Breadcrumb,
