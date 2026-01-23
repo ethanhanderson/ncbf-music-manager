@@ -1,24 +1,26 @@
 'use client'
 
-import dynamic from 'next/dynamic'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ComponentType } from 'react'
 import type { CreateSetDialogProps } from '@/components/create-set-dialog'
 
-const CreateSetDialog = dynamic(
-  () => import('@/components/create-set-dialog').then((mod) => ({ default: mod.CreateSetDialog })),
-  { ssr: false }
-)
-
 export function CreateSetDialogClient(props: CreateSetDialogProps) {
-  const [mounted, setMounted] = useState(false)
+  const [Component, setComponent] = useState<ComponentType<CreateSetDialogProps> | null>(null)
 
   useEffect(() => {
-    setMounted(true)
+    let isMounted = true
+    void import('@/components/create-set-dialog').then((mod) => {
+      if (isMounted) {
+        setComponent(() => mod.CreateSetDialog)
+      }
+    })
+    return () => {
+      isMounted = false
+    }
   }, [])
 
-  if (!mounted) {
+  if (!Component) {
     return null
   }
 
-  return <CreateSetDialog {...props} />
+  return <Component {...props} />
 }

@@ -1,24 +1,26 @@
 'use client'
 
-import dynamic from 'next/dynamic'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ComponentType } from 'react'
 import type { SetSongListProps } from '@/components/set-song-list'
 
-const SetSongList = dynamic(
-  () => import('@/components/set-song-list').then((mod) => ({ default: mod.SetSongList })),
-  { ssr: false }
-)
-
 export function SetSongListClient(props: SetSongListProps) {
-  const [mounted, setMounted] = useState(false)
+  const [Component, setComponent] = useState<ComponentType<SetSongListProps> | null>(null)
 
   useEffect(() => {
-    setMounted(true)
+    let isMounted = true
+    void import('@/components/set-song-list').then((mod) => {
+      if (isMounted) {
+        setComponent(() => mod.SetSongList)
+      }
+    })
+    return () => {
+      isMounted = false
+    }
   }, [])
 
-  if (!mounted) {
+  if (!Component) {
     return null
   }
 
-  return <SetSongList {...props} />
+  return <Component {...props} />
 }

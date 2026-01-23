@@ -1,24 +1,26 @@
 'use client'
 
-import dynamic from 'next/dynamic'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ComponentType } from 'react'
 import type { SongSlideArrangementsProps } from '@/components/song-slide-arrangements'
 
-const SongSlideArrangements = dynamic(
-  () => import('@/components/song-slide-arrangements').then((mod) => ({ default: mod.SongSlideArrangements })),
-  { ssr: false }
-)
-
 export function SongSlideArrangementsClient(props: SongSlideArrangementsProps) {
-  const [mounted, setMounted] = useState(false)
+  const [Component, setComponent] = useState<ComponentType<SongSlideArrangementsProps> | null>(null)
 
   useEffect(() => {
-    setMounted(true)
+    let isMounted = true
+    void import('@/components/song-slide-arrangements').then((mod) => {
+      if (isMounted) {
+        setComponent(() => mod.SongSlideArrangements)
+      }
+    })
+    return () => {
+      isMounted = false
+    }
   }, [])
 
-  if (!mounted) {
+  if (!Component) {
     return null
   }
 
-  return <SongSlideArrangements {...props} />
+  return <Component {...props} />
 }
