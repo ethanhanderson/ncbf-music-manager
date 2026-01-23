@@ -61,7 +61,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
 
-interface SetSongListProps {
+export interface SetSongListProps {
   setSongs: SetSongWithDetails[]
   setId: string
   groupId: string

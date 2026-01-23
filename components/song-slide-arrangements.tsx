@@ -299,7 +299,7 @@ type GroupDragData = {
   customLabel?: string
 }
 
-interface SongSlideArrangementsProps {
+export interface SongSlideArrangementsProps {
   songId: string
   groupId: string
   groupSlug: string

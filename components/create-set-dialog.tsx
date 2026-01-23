@@ -89,7 +89,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
-interface CreateSetDialogProps {
+export interface CreateSetDialogProps {
   groupId?: string
   groupSlug?: string
   songs?: Song[]
