@@ -43,8 +43,11 @@ export function CreateGroupDialog() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/50" onClick={() => setIsOpen(false)} />
-      <div className="relative bg-card border border-border rounded-lg shadow-lg w-full max-w-md mx-4 p-6">
+      <div
+        className="fixed inset-0 bg-foreground/20 dark:bg-background/60"
+        onClick={() => setIsOpen(false)}
+      />
+      <div className="relative bg-card border border-border rounded-none shadow-lg w-full max-w-md mx-4 p-6">
         <h2 className="text-lg font-semibold mb-4">Create New Group</h2>
         
         <form onSubmit={handleSubmit} className="space-y-4">

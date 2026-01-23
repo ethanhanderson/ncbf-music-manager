@@ -46,7 +46,7 @@ export function LyricsPreview({ assetId, text, warning }: LyricsPreviewProps) {
   return (
     <div className="space-y-3">
       {warning && (
-        <div className="flex items-center gap-2 text-yellow-600 dark:text-yellow-500 text-sm">
+        <div className="flex items-center gap-2 text-destructive text-sm">
           <HugeiconsIcon icon={AlertTriangle} strokeWidth={2} className="h-4 w-4 shrink-0" />
           {warning}
         </div>

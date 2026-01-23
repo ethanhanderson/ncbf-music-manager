@@ -35,8 +35,13 @@ export default async function GroupSongsPage({ params, searchParams }: SongsPage
   const songRows: SongRow[] = songs.map((song) => ({
     id: song.id,
     title: song.title,
+    defaultKey: song.default_key,
+    ccliId: song.ccli_id,
+    artist: song.artist,
+    linkUrl: song.link_url,
     groupName: group.name,
     groupSlug: group.slug,
+    groupId: group.id,
     createdAt: song.created_at ?? '',
     arrangementCount: song.arrangementCount,
     lastUsedDate: song.lastUsedDate,
@@ -44,7 +49,7 @@ export default async function GroupSongsPage({ params, searchParams }: SongsPage
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card">
+      <header className="border-b border-border bg-card print:hidden">
         <div className="mx-auto max-w-6xl px-4 py-6">
           <Breadcrumb>
             <BreadcrumbList>

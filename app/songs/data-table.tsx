@@ -241,7 +241,7 @@ export function DataTable<TData, TValue>({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex w-full items-center gap-2 sm:max-w-[520px]">
           <Input
-            placeholder="Search songs or groups..."
+            placeholder="Search songs..."
             value={globalFilter}
             onChange={(event) => setGlobalFilter(event.target.value)}
             className="h-10"

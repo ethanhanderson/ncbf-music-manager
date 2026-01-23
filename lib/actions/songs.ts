@@ -7,22 +7,23 @@ import {
   type Song,
   type SongArrangement,
   type SongAsset,
-  type SongSlide,
 } from '@/lib/supabase/server'
 import { extractText } from '@/lib/extractors'
 import { createDefaultArrangementFromLyrics } from '@/lib/actions/song-arrangements'
+import { createSongRevisionSnapshot } from '@/lib/actions/song-revisions'
 
 export type SongWithGroup = Song & { music_groups: MusicGroup }
 
 export interface DuplicateCheckResult {
   isDuplicate: boolean
   existingSong?: Song
-  matchType?: 'title' | 'title_and_lyrics'
+  matchType?: 'title' | 'title_and_lyrics' | 'lyrics'
 }
 
 export interface SongListStats {
   arrangementCount: number
   lastUsedDate: string | null
+  totalUses: number
 }
 
 /**
@@ -71,9 +72,66 @@ function areLyricsSimilar(text1: string, text2: string, threshold = 0.85): boole
   return similarity >= threshold
 }
 
-function slidesToPlainText(slides: SongSlide[] | null | undefined): string {
-  if (!slides || slides.length === 0) return ''
-  return slides.map((slide) => slide.lines.join('\n')).join('\n\n')
+async function getSlidesTextBySongIds(
+  supabase: ReturnType<typeof createServerSupabaseClient>,
+  songIds: string[]
+): Promise<Map<string, string>> {
+  if (songIds.length === 0) {
+    return new Map()
+  }
+
+  const { data: groupRows, error: groupError } = await supabase
+    .from('song_slide_groups')
+    .select('id, song_id, label, custom_label, position')
+    .in('song_id', songIds)
+
+  if (groupError || !groupRows) {
+    console.error('Error fetching song slide groups:', groupError)
+    return new Map()
+  }
+
+  const { data: slideRows, error: slideError } = await supabase
+    .from('song_slides')
+    .select('song_id, slide_group_id, position, lines')
+    .in('song_id', songIds)
+
+  if (slideError || !slideRows) {
+    console.error('Error fetching song slides:', slideError)
+    return new Map()
+  }
+
+  const groupsBySong = new Map<string, Array<{ id: string; position: number }>>()
+  groupRows.forEach((group) => {
+    const list = groupsBySong.get(group.song_id) ?? []
+    list.push({ id: group.id, position: group.position })
+    groupsBySong.set(group.song_id, list)
+  })
+
+  const slidesByGroupId = new Map<string, Array<{ position: number; lines: string[] }>>()
+  slideRows.forEach((slide) => {
+    const list = slidesByGroupId.get(slide.slide_group_id) ?? []
+    list.push({ position: slide.position, lines: slide.lines })
+    slidesByGroupId.set(slide.slide_group_id, list)
+  })
+
+  const result = new Map<string, string>()
+  groupsBySong.forEach((groups, songId) => {
+    const orderedGroups = [...groups].sort((a, b) => a.position - b.position)
+    const slideBlocks: string[] = []
+
+    orderedGroups.forEach((group) => {
+      const groupSlides = slidesByGroupId.get(group.id) ?? []
+      groupSlides
+        .sort((a, b) => a.position - b.position)
+        .forEach((slide) => {
+          slideBlocks.push(slide.lines.join('\n'))
+        })
+    })
+
+    result.set(songId, slideBlocks.join('\n\n'))
+  })
+
+  return result
 }
 
 /**
@@ -111,27 +169,10 @@ export async function checkForDuplicateSong(
   // If we have lyrics, check for lyrics match too
   if (lyrics?.trim()) {
     const songIds = titleMatches.map((song) => song.id)
-    const { data: arrangements } = await supabase
-      .from('song_arrangements')
-      .select('song_id, name, slides, created_at')
-      .in('song_id', songIds)
-      .order('created_at', { ascending: true })
-    
-    const arrangementBySong = new Map<string, SongArrangement>()
-    arrangements?.forEach((arrangement) => {
-      const existing = arrangementBySong.get(arrangement.song_id)
-      if (!existing) {
-        arrangementBySong.set(arrangement.song_id, arrangement as SongArrangement)
-        return
-      }
-      if (existing.name.toLowerCase() !== 'default' && arrangement.name.toLowerCase() === 'default') {
-        arrangementBySong.set(arrangement.song_id, arrangement as SongArrangement)
-      }
-    })
+    const lyricsBySongId = await getSlidesTextBySongIds(supabase, songIds)
     
     for (const song of titleMatches) {
-      const arrangement = arrangementBySong.get(song.id)
-      const existingLyrics = slidesToPlainText(arrangement?.slides ?? null)
+      const existingLyrics = lyricsBySongId.get(song.id) ?? ''
       
       if (existingLyrics && areLyricsSimilar(lyrics, existingLyrics)) {
         return {
@@ -156,6 +197,42 @@ export async function checkForDuplicateSong(
     existingSong: titleMatches[0],
     matchType: 'title',
   }
+}
+
+/**
+ * Check if lyrics are a duplicate of ANY song in this group (even if title differs).
+ */
+export async function checkForDuplicateLyrics(
+  groupId: string,
+  lyrics: string
+): Promise<DuplicateCheckResult> {
+  const supabase = createServerSupabaseClient()
+
+  const text = lyrics?.trim()
+  if (!text) return { isDuplicate: false }
+
+  // Fetch all songs in the group (IDs needed to load slide text)
+  const { data: songs, error } = await supabase
+    .from('songs')
+    .select('id, title, group_id, created_at, default_key, ccli_id, artist, link_url')
+    .eq('group_id', groupId)
+
+  if (error || !songs || songs.length === 0) {
+    return { isDuplicate: false }
+  }
+
+  const songIds = songs.map((s) => s.id)
+  const lyricsBySongId = await getSlidesTextBySongIds(supabase, songIds)
+
+  for (const song of songs as Song[]) {
+    const existingLyrics = lyricsBySongId.get(song.id) ?? ''
+    if (!existingLyrics) continue
+    if (areLyricsSimilar(text, existingLyrics)) {
+      return { isDuplicate: true, existingSong: song, matchType: 'lyrics' }
+    }
+  }
+
+  return { isDuplicate: false }
 }
 
 /**
@@ -251,7 +328,7 @@ function buildSongStats(
 ): Record<string, SongListStats> {
   const stats: Record<string, SongListStats> = {}
   songs.forEach((song) => {
-    stats[song.id] = { arrangementCount: 0, lastUsedDate: null }
+    stats[song.id] = { arrangementCount: 0, lastUsedDate: null, totalUses: 0 }
   })
 
   arrangementRows.forEach((row) => {
@@ -261,6 +338,7 @@ function buildSongStats(
 
   usageRows.forEach((row) => {
     if (!stats[row.song_id] || !row.sets?.service_date) return
+    stats[row.song_id].totalUses += 1
     const next = row.sets.service_date
     const current = stats[row.song_id].lastUsedDate
     if (!current || new Date(next) > new Date(current)) {
@@ -321,6 +399,54 @@ export async function getSongsWithStats(
     ...song,
     ...stats[song.id],
   }))
+}
+
+export async function getSongsWithArrangementsAndStats(
+  groupId: string
+): Promise<{ songs: Array<Song & SongListStats>; arrangements: SongArrangementSummary[] }> {
+  const supabase = createServerSupabaseClient()
+  const { data: songs, error: songsError } = await supabase
+    .from('songs')
+    .select('*')
+    .eq('group_id', groupId)
+    .order('title')
+
+  if (songsError || !songs) {
+    console.error('Error fetching songs:', songsError)
+    return { songs: [], arrangements: [] }
+  }
+
+  if (songs.length === 0) {
+    return { songs: [], arrangements: [] }
+  }
+
+  const songIds = songs.map((song) => song.id)
+  const [{ data: arrangements }, { data: usageRows }] = await Promise.all([
+    supabase
+      .from('song_arrangements')
+      .select('id, song_id, name')
+      .in('song_id', songIds)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('set_songs')
+      .select('song_id, sets!inner(service_date, group_id)')
+      .in('song_id', songIds)
+      .eq('sets.group_id', groupId),
+  ])
+
+  const stats = buildSongStats(
+    songs,
+    (arrangements as Array<{ song_id: string }>) || [],
+    (usageRows as Array<{ song_id: string; sets?: { service_date: string } | null }>) || []
+  )
+
+  return {
+    songs: songs.map((song) => ({
+      ...song,
+      ...stats[song.id],
+    })),
+    arrangements: (arrangements as SongArrangementSummary[]) || [],
+  }
 }
 
 export async function getRecentSongs(groupId: string, limit: number = 5): Promise<Song[]> {
@@ -475,6 +601,10 @@ export async function createSong(
   const file = formData.get('file') as File | null
   const lyrics = formData.get('lyrics') as string | null
   const overrideExistingId = formData.get('overrideExistingId') as string | null
+  const defaultKeyRaw = formData.get('default_key')
+  const ccliIdRaw = formData.get('ccli_id')
+  const artistRaw = formData.get('artist')
+  const linkUrlRaw = formData.get('link_url')
 
   let songTitle = title?.trim()
 
@@ -489,6 +619,13 @@ export async function createSong(
 
   const supabase = createServerSupabaseClient()
 
+  const createMeta = {
+    default_key: typeof defaultKeyRaw === 'string' && defaultKeyRaw.trim() ? defaultKeyRaw.trim() : null,
+    ccli_id: typeof ccliIdRaw === 'string' && ccliIdRaw.trim() ? ccliIdRaw.trim() : null,
+    artist: typeof artistRaw === 'string' && artistRaw.trim() ? artistRaw.trim() : null,
+    link_url: typeof linkUrlRaw === 'string' && linkUrlRaw.trim() ? linkUrlRaw.trim() : null,
+  }
+
   // If overriding an existing song
   if (overrideExistingId) {
     const { data: existingSong, error: fetchError } = await supabase
@@ -500,6 +637,24 @@ export async function createSong(
 
     if (fetchError || !existingSong) {
       return { success: false, error: 'Existing song not found' }
+    }
+
+    const updatePatch: Record<string, string | null> = { title: songTitle }
+    if (createMeta.default_key) updatePatch.default_key = createMeta.default_key
+    if (createMeta.ccli_id) updatePatch.ccli_id = createMeta.ccli_id
+    if (createMeta.artist) updatePatch.artist = createMeta.artist
+    if (createMeta.link_url) updatePatch.link_url = createMeta.link_url
+
+    const { data: updatedSong, error: updateError } = await supabase
+      .from('songs')
+      .update(updatePatch)
+      .eq('id', existingSong.id)
+      .eq('group_id', groupId)
+      .select()
+      .single()
+
+    if (updateError || !updatedSong) {
+      return { success: false, error: 'Failed to update song' }
     }
 
     // Delete old lyrics_source assets for this song
@@ -525,15 +680,18 @@ export async function createSong(
 
     // Handle new content
     if (file) {
-      await processFileUpload(supabase, existingSong.id, groupId, file)
+      const preExtractedText = lyrics?.trim() ? lyrics.trim() : undefined
+      await processFileUpload(supabase, existingSong.id, groupId, file, preExtractedText)
     } else if (lyrics?.trim()) {
       await processManualLyrics(supabase, existingSong.id, groupId, lyrics.trim())
     }
 
+    await createSongRevisionSnapshot(existingSong.id, groupId)
+
     revalidatePath(`/groups/${groupSlug}/songs`)
     revalidatePath(`/groups/${groupSlug}/songs/${existingSong.id}`)
     revalidatePath('/songs')
-    return { success: true, song: existingSong }
+    return { success: true, song: updatedSong }
   }
   
   // Create new song
@@ -542,6 +700,7 @@ export async function createSong(
     .insert({
       title: songTitle,
       group_id: groupId,
+      ...createMeta,
     })
     .select()
     .single()
@@ -552,12 +711,15 @@ export async function createSong(
 
   // Handle File Upload (if present)
   if (file) {
-    await processFileUpload(supabase, song.id, groupId, file)
-  } 
+    const preExtractedText = lyrics?.trim() ? lyrics.trim() : undefined
+    await processFileUpload(supabase, song.id, groupId, file, preExtractedText)
+  }
   // Handle Manual Lyrics (if present and no file)
   else if (lyrics?.trim()) {
     await processManualLyrics(supabase, song.id, groupId, lyrics.trim())
   }
+
+  await createSongRevisionSnapshot(song.id, groupId)
 
   revalidatePath(`/groups/${groupSlug}/songs`)
   revalidatePath('/songs')
@@ -901,6 +1063,8 @@ export async function createSongFromFile(
     // Upload new file
     await processFileUpload(supabase, existingSong.id, groupId, file, options.extractedText)
 
+    await createSongRevisionSnapshot(existingSong.id, groupId)
+
     return { success: true, song: existingSong }
   }
 
@@ -922,6 +1086,8 @@ export async function createSongFromFile(
   // Process the file upload and extract text
   await processFileUpload(supabase, song.id, groupId, file, options?.extractedText)
 
+  await createSongRevisionSnapshot(song.id, groupId)
+
   return { success: true, song }
 }
 
@@ -940,23 +1106,44 @@ export async function updateSong(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
   const title = formData.get('title') as string
+  const defaultKeyRaw = formData.get('default_key')
+  const ccliIdRaw = formData.get('ccli_id')
+  const artistRaw = formData.get('artist')
+  const linkUrlRaw = formData.get('link_url')
 
   if (!title?.trim()) {
     return { success: false, error: 'Title is required' }
   }
 
+  const updatePatch: Record<string, string | null> = {
+    title: title.trim(),
+  }
+
+  if (defaultKeyRaw !== null) {
+    updatePatch.default_key = typeof defaultKeyRaw === 'string' && defaultKeyRaw.trim() ? defaultKeyRaw.trim() : null
+  }
+  if (ccliIdRaw !== null) {
+    updatePatch.ccli_id = typeof ccliIdRaw === 'string' && ccliIdRaw.trim() ? ccliIdRaw.trim() : null
+  }
+  if (artistRaw !== null) {
+    updatePatch.artist = typeof artistRaw === 'string' && artistRaw.trim() ? artistRaw.trim() : null
+  }
+  if (linkUrlRaw !== null) {
+    updatePatch.link_url = typeof linkUrlRaw === 'string' && linkUrlRaw.trim() ? linkUrlRaw.trim() : null
+  }
+
   const supabase = createServerSupabaseClient()
   const { error } = await supabase
     .from('songs')
-    .update({
-      title: title.trim(),
-    })
+    .update(updatePatch)
     .eq('id', id)
     .eq('group_id', groupId)
 
   if (error) {
     return { success: false, error: 'Failed to update song' }
   }
+
+  await createSongRevisionSnapshot(id, groupId)
 
   revalidatePath(`/groups/${groupSlug}/songs`)
   revalidatePath(`/groups/${groupSlug}/songs/${id}`)
@@ -999,18 +1186,19 @@ export async function updateSongAssetText(
     return { success: false, error: 'Failed to load asset' }
   }
 
+  let resolvedGroupId = asset.group_id
+
   if (asset.asset_type === 'lyrics_source' && text.trim()) {
-    let groupId = asset.group_id
-    if (!groupId) {
+    if (!resolvedGroupId) {
       const { data: song } = await supabase
         .from('songs')
         .select('group_id')
         .eq('id', asset.song_id)
         .single()
-      groupId = song?.group_id ?? null
+      resolvedGroupId = song?.group_id ?? null
     }
-    if (groupId) {
-      await createDefaultArrangementFromLyrics(asset.song_id, groupId, text)
+    if (resolvedGroupId) {
+      await createDefaultArrangementFromLyrics(asset.song_id, resolvedGroupId, text)
     }
   }
 
@@ -1024,6 +1212,10 @@ export async function updateSongAssetText(
 
   if (error) {
     return { success: false, error: 'Failed to update slides' }
+  }
+
+  if (asset.song_id && resolvedGroupId) {
+    await createSongRevisionSnapshot(asset.song_id, resolvedGroupId)
   }
 
   revalidatePaths.forEach((path) => revalidatePath(path))

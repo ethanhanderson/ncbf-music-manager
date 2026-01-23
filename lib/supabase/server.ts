@@ -31,22 +31,27 @@ export interface SongSlide {
   lines: string[]
 }
 
+export interface SongSlideGroup {
+  id: string
+  label: SongSlide['label']
+  customLabel?: string | null
+  position: number
+}
+
 export interface SongSlideGroupArrangementItem {
   id: string
+  key: string
   label: SongSlide['label']
   customLabel?: string
 }
 
-export type SongArrangement = Omit<
-  Database['public']['Tables']['song_arrangements']['Row'],
-  'slides' | 'group_arrangement' | 'master_group_arrangement'
-> & {
-  slides: SongSlide[] | null
-  group_arrangement: SongSlideGroupArrangementItem[] | null
-  master_group_arrangement: SongSlideGroupArrangementItem[] | null
+export type SongArrangement = Database['public']['Tables']['song_arrangements']['Row'] & {
+  group_order: string[] | null
 }
 
 export type SongAsset = Database['public']['Tables']['song_assets']['Row']
+
+export type SongRevision = Database['public']['Tables']['song_revisions']['Row']
 
 export type Set = Database['public']['Tables']['sets']['Row']
 

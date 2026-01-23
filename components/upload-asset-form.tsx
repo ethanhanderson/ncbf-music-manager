@@ -78,7 +78,7 @@ export function UploadAssetForm({ songId, assetType }: UploadAssetFormProps) {
   return (
     <div className="space-y-3">
       <div
-        className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${
+        className={`border-2 border-dashed rounded-none p-6 text-center transition-colors cursor-pointer ${
           dragOver ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground'
         } ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}
         onDrop={handleDrop}

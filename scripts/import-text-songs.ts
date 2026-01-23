@@ -24,6 +24,36 @@ type ImportOptions = {
   dryRun: boolean
 }
 
+const GROUP_KEY_SEPARATOR = '::'
+
+function getGroupKey(label: SongSlide['label'], customLabel?: string) {
+  return `${label}${GROUP_KEY_SEPARATOR}${customLabel ?? ''}`
+}
+
+function buildSlideGroupsFromSlides(slides: SongSlide[]) {
+  const map = new Map<string, { key: string; label: SongSlide['label']; customLabel?: string; slides: SongSlide[] }>()
+  const ordered: Array<{ key: string; label: SongSlide['label']; customLabel?: string; slides: SongSlide[] }> = []
+
+  slides.forEach((slide) => {
+    const key = getGroupKey(slide.label, slide.customLabel)
+    const existing = map.get(key)
+    if (existing) {
+      existing.slides.push(slide)
+      return
+    }
+    const entry = {
+      key,
+      label: slide.label,
+      customLabel: slide.customLabel,
+      slides: [slide],
+    }
+    map.set(key, entry)
+    ordered.push(entry)
+  })
+
+  return ordered
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DEFAULT_ROOT = path.resolve(__dirname, '../../test slide files/Text')
 
@@ -362,19 +392,82 @@ async function main() {
       continue
     }
 
-    const { error: arrangementInsertError } = await supabase
+    const { data: arrangement, error: arrangementInsertError } = await supabase
       .from('song_arrangements')
       .insert({
         song_id: songId,
         group_id: resolvedGroupId,
         name: 'Default',
-        slides: parsed.slides,
+        is_locked: true,
       })
+      .select('id')
+      .single()
 
-    if (arrangementInsertError) {
+    if (arrangementInsertError || !arrangement) {
       console.error(`[error] Failed to create arrangement for "${parsed.title}": ${arrangementInsertError.message}`)
       skippedArrangements += 1
       continue
+    }
+
+    const groupDefinitions = buildSlideGroupsFromSlides(parsed.slides)
+    const groupRows = groupDefinitions.map((group, index) => ({
+      id: randomUUID(),
+      song_id: songId,
+      group_id: resolvedGroupId,
+      label: group.label,
+      custom_label: group.customLabel ?? null,
+      position: index + 1,
+    }))
+
+    if (groupRows.length > 0) {
+      const { error: groupInsertError } = await supabase.from('song_slide_groups').insert(groupRows)
+      if (groupInsertError) {
+        console.error(`[error] Failed to create slide groups for "${parsed.title}": ${groupInsertError.message}`)
+        skippedArrangements += 1
+        continue
+      }
+    }
+
+    const groupIdByKey = new Map(groupRows.map((group) => [getGroupKey(group.label, group.custom_label ?? undefined), group.id]))
+    const slideRows = groupDefinitions.flatMap((group) => {
+      const groupId = groupIdByKey.get(group.key)
+      if (!groupId) return []
+      return group.slides.map((slide, index) => ({
+        id: randomUUID(),
+        song_id: songId,
+        group_id: resolvedGroupId,
+        slide_group_id: groupId,
+        position: index + 1,
+        lines: slide.lines.length > 0 ? slide.lines : [''],
+      }))
+    })
+
+    if (slideRows.length > 0) {
+      const { error: slideInsertError } = await supabase.from('song_slides').insert(slideRows)
+      if (slideInsertError) {
+        console.error(`[error] Failed to create slides for "${parsed.title}": ${slideInsertError.message}`)
+        skippedArrangements += 1
+        continue
+      }
+    }
+
+    const arrangementGroupRows = groupRows.map((group, index) => ({
+      arrangement_id: arrangement.id,
+      slide_group_id: group.id,
+      position: index + 1,
+    }))
+
+    if (arrangementGroupRows.length > 0) {
+      const { error: arrangementGroupError } = await supabase
+        .from('song_arrangement_groups')
+        .insert(arrangementGroupRows)
+      if (arrangementGroupError) {
+        console.error(
+          `[error] Failed to create arrangement order for "${parsed.title}": ${arrangementGroupError.message}`
+        )
+        skippedArrangements += 1
+        continue
+      }
     }
 
     createdArrangements += 1

@@ -57,7 +57,7 @@ export default async function GroupPage({ params }: GroupPageProps) {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border bg-card">
+      <header className="border-b border-border bg-card print:hidden">
         <div className="mx-auto max-w-6xl px-4 py-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -226,7 +226,7 @@ export default async function GroupPage({ params }: GroupPageProps) {
                             <Link key={song.id} href={`/groups/${group.slug}/songs/${song.id}`} className="block">
                                 <Card className="hover:bg-muted/60 transition-colors">
                                     <CardContent className="p-3 flex items-center gap-3">
-                                        <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center shrink-0">
+                                        <div className="h-8 w-8 rounded-none bg-muted flex items-center justify-center shrink-0">
                                             <HugeiconsIcon icon={MusicNote03Icon} className="w-4 h-4 text-primary" />
                                         </div>
                                         <div className="min-w-0">

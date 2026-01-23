@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
-import { getSongsWithArrangements } from '@/lib/actions/songs'
+import { getSongsWithArrangementsAndStats } from '@/lib/actions/songs'
 import { getUpcomingSetSongIds } from '@/lib/actions/sets'
 
 interface RouteParams {
@@ -30,7 +30,7 @@ export async function GET(_: Request, { params }: RouteParams) {
 
   const [{ songs, arrangements }, { data: sets, error: setsError }, upcomingSetSongIds] =
     await Promise.all([
-      getSongsWithArrangements(group.id),
+      getSongsWithArrangementsAndStats(group.id),
       supabase
         .from('sets')
         .select('service_date')

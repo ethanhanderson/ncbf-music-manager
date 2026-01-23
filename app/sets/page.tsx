@@ -41,7 +41,7 @@ export default async function SetsCatalogPage({ searchParams }: SetsCatalogPageP
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card">
+      <header className="border-b border-border bg-card print:hidden">
         <div className="mx-auto max-w-6xl px-4 py-6">
           <Breadcrumb>
             <BreadcrumbList>

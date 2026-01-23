@@ -1,8 +1,17 @@
 'use client'
 
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 import { useRouter } from 'next/navigation'
-import { format } from 'date-fns'
+import { format, formatDistanceToNowStrict } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -16,7 +25,8 @@ import {
 } from '@/components/ui/command'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
+import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   Select,
@@ -32,6 +42,12 @@ import { createSet } from '@/lib/actions/sets'
 import type { SongArrangementSummary } from '@/lib/actions/songs'
 import type { Song } from '@/lib/supabase/server'
 import { cn } from '@/lib/utils'
+import {
+  pickWeightedSongs,
+  type AgePreference,
+  type PlayPreference,
+} from '@/lib/utils/set-song-picker'
+import { RadioCardGroup } from '@/components/radio-card-group'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { mergeProps } from '@base-ui/react/merge-props'
 import {
@@ -55,14 +71,21 @@ import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import {
   Add01Icon,
   Alert01Icon,
+  ArrowDown01Icon,
+  ArrowUp01Icon,
+  ArrowUpDownIcon,
+  CalendarAdd01Icon,
   Cancel01Icon,
   CheckmarkCircle02Icon,
   ChevronDown,
   ChevronUp,
+  Clock01Icon,
   DragDropVerticalIcon,
   Edit01Icon,
+  Exchange01Icon,
   InformationCircleIcon,
   Layers01Icon,
+  ShuffleIcon,
 } from '@hugeicons/core-free-icons'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
@@ -83,6 +106,11 @@ interface SelectedSetSong {
   title: string
   arrangementId: string | null
   notes: string
+}
+
+type SongWithStats = Song & {
+  totalUses?: number | null
+  lastUsedDate?: string | null
 }
 
 function composeRefs<T>(...refs: Array<React.Ref<T> | undefined>) {
@@ -175,6 +203,15 @@ function TruncatedSongTitle({ title }: { title: string }) {
   )
 }
 
+function formatSongUsageDate(dateString?: string | null) {
+  if (!dateString) return null
+  const date = new Date(`${dateString}T00:00:00`)
+  return {
+    relative: formatDistanceToNowStrict(date, { addSuffix: true }),
+    absolute: format(date, 'PPP'),
+  }
+}
+
 function SortableSongRow({
   song,
   arrangements,
@@ -228,19 +265,23 @@ function SortableSongRow({
               render={(popoverProps) => (
                 <Tooltip>
                   <TooltipTrigger
-                    render={(tooltipProps) => (
-                      <Button
-                        {...mergeProps<'button'>(popoverProps, tooltipProps)}
-                        ref={composeRefs(popoverProps.ref, tooltipProps.ref)}
-                        type="button"
-                        variant="secondary"
-                        size="icon-xs"
-                        className="h-7 w-7 cursor-pointer"
-                        aria-label="Edit arrangement"
-                      >
-                        <HugeiconsIcon icon={Layers01Icon} strokeWidth={2} className="h-4 w-4" />
-                      </Button>
-                    )}
+                    render={(tooltipProps) => {
+                      const mergedProps = mergeProps<'button'>(popoverProps, tooltipProps)
+                      const { ref: mergedRef, ...restProps } = mergedProps
+                      return (
+                        <Button
+                          {...restProps}
+                          ref={composeRefs(mergedRef, popoverProps.ref, tooltipProps.ref)}
+                          type="button"
+                          variant="secondary"
+                          size="icon-xs"
+                          className="h-7 w-7 cursor-pointer"
+                          aria-label="Edit arrangement"
+                        >
+                          <HugeiconsIcon icon={Layers01Icon} strokeWidth={2} className="h-4 w-4" />
+                        </Button>
+                      )
+                    }}
                   />
                   <TooltipContent>Arrangement</TooltipContent>
                 </Tooltip>
@@ -274,19 +315,23 @@ function SortableSongRow({
               render={(popoverProps) => (
                 <Tooltip>
                   <TooltipTrigger
-                    render={(tooltipProps) => (
-                      <Button
-                        {...mergeProps<'button'>(popoverProps, tooltipProps)}
-                        ref={composeRefs(popoverProps.ref, tooltipProps.ref)}
-                        type="button"
-                        variant="secondary"
-                        size="icon-xs"
-                        className="h-7 w-7 cursor-pointer"
-                        aria-label="Edit notes"
-                      >
-                        <HugeiconsIcon icon={Edit01Icon} strokeWidth={2} className="h-4 w-4" />
-                      </Button>
-                    )}
+                    render={(tooltipProps) => {
+                      const mergedProps = mergeProps<'button'>(popoverProps, tooltipProps)
+                      const { ref: mergedRef, ...restProps } = mergedProps
+                      return (
+                        <Button
+                          {...restProps}
+                          ref={composeRefs(mergedRef, popoverProps.ref, tooltipProps.ref)}
+                          type="button"
+                          variant="secondary"
+                          size="icon-xs"
+                          className="h-7 w-7 cursor-pointer"
+                          aria-label="Edit notes"
+                        >
+                          <HugeiconsIcon icon={Edit01Icon} strokeWidth={2} className="h-4 w-4" />
+                        </Button>
+                      )
+                    }}
                   />
                   <TooltipContent>Notes</TooltipContent>
                 </Tooltip>
@@ -368,12 +413,13 @@ export function CreateSetDialog({
   const [activeGroupName, setActiveGroupName] = useState(
     groupId ? groups.find((group) => group.id === groupId)?.name ?? '' : ''
   )
-  const [activeSongs, setActiveSongs] = useState<Song[]>(songs)
+  const [activeSongs, setActiveSongs] = useState<SongWithStats[]>(songs)
   const [activeArrangements, setActiveArrangements] = useState<SongArrangementSummary[]>(arrangements)
   const [activeUpcomingSetSongIds, setActiveUpcomingSetSongIds] = useState<string[]>(upcomingSetSongIds)
   const [activeLastSetDate, setActiveLastSetDate] = useState<string | undefined>(lastSetDate)
   const [activeExistingSetDates, setActiveExistingSetDates] = useState<string[]>(existingSetDates)
   const [isGroupLoading, setIsGroupLoading] = useState(false)
+  const isDialogDataLoadingRef = useRef(false)
 
   const getDefaultServiceDate = useCallback(
     (overrideLastSetDate?: string) => {
@@ -394,8 +440,14 @@ export function CreateSetDialog({
   )
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
   const [isSongPickerOpen, setIsSongPickerOpen] = useState(false)
+  const [isRandomPickerOpen, setIsRandomPickerOpen] = useState(false)
   const [selectedSongs, setSelectedSongs] = useState<SelectedSetSong[]>([])
   const [isDraggingList, setIsDraggingList] = useState(false)
+  const [randomCount, setRandomCount] = useState(5)
+  const [randomPlayPreference, setRandomPlayPreference] = useState<PlayPreference>('neutral')
+  const [randomAgePreference, setRandomAgePreference] = useState<AgePreference>('neutral')
+  const [randomAvoidUpcoming, setRandomAvoidUpcoming] = useState(true)
+  const [randomApplyMode, setRandomApplyMode] = useState<'append' | 'replace'>('append')
   const router = useRouter()
 
   // Parse existing set dates into Date objects for calendar highlighting
@@ -405,6 +457,11 @@ export function CreateSetDialog({
       return new Date(year, month - 1, day)
     })
   }, [activeExistingSetDates])
+
+  const hasSongStats = useMemo(
+    () => activeSongs.length > 0 && activeSongs.every((song) => typeof song.totalUses === 'number'),
+    [activeSongs]
+  )
 
   // Check if the selected date already has a set
   const isDateWithExistingSet = useMemo(() => {
@@ -450,6 +507,24 @@ export function CreateSetDialog({
     [activeUpcomingSetSongIds]
   )
 
+  const randomCandidateCount = useMemo(() => {
+    const selectedIdSet =
+      randomApplyMode === 'replace'
+        ? new Set<string>()
+        : new Set(selectedSongs.map((song) => song.id))
+    return activeSongs.filter((song) => {
+      if (selectedIdSet.has(song.id)) return false
+      if (randomAvoidUpcoming && upcomingSetSongIdSet.has(song.id)) return false
+      return true
+    }).length
+  }, [activeSongs, randomApplyMode, randomAvoidUpcoming, selectedSongs, upcomingSetSongIdSet])
+  const maxRandomCount = Math.max(1, randomCandidateCount)
+
+  useEffect(() => {
+    if (randomCandidateCount <= 0) return
+    setRandomCount((prev) => Math.min(prev, randomCandidateCount))
+  }, [randomCandidateCount])
+
   const selectedSongsPayload = useMemo(
     () =>
       selectedSongs.map((song, index) => ({
@@ -482,6 +557,68 @@ export function CreateSetDialog({
   const handleRemoveSong = (songId: string) => {
     setSelectedSongs((prev) => prev.filter((song) => song.id !== songId))
   }
+
+  const buildSelectedSong = useCallback(
+    (song: { id: string; title: string }): SelectedSetSong => {
+      const defaultArrangement = arrangementsBySong.get(song.id)?.[0]?.id ?? null
+      return {
+        id: song.id,
+        title: song.title,
+        arrangementId: defaultArrangement,
+        notes: '',
+      }
+    },
+    [arrangementsBySong]
+  )
+
+  const handleRandomPick = useCallback(() => {
+    const selectedIds =
+      randomApplyMode === 'replace' ? [] : selectedSongs.map((song) => song.id)
+    const picks = pickWeightedSongs({
+      songs: activeSongs.map((song) => ({
+        id: song.id,
+        title: song.title,
+        created_at: song.created_at ?? null,
+        totalUses: song.totalUses ?? 0,
+      })),
+      selectedSongIds: selectedIds,
+      upcomingSetSongIds: activeUpcomingSetSongIds,
+      config: {
+        count: randomCount,
+        playPreference: randomPlayPreference,
+        agePreference: randomAgePreference,
+        avoidUpcoming: randomAvoidUpcoming,
+      },
+    })
+
+    if (picks.length === 0) {
+      return
+    }
+
+    setSelectedSongs((prev) => {
+      const base = randomApplyMode === 'replace' ? [] : prev
+      const existingIds = new Set(base.map((song) => song.id))
+      const next = [...base]
+      picks.forEach((song) => {
+        if (existingIds.has(song.id)) return
+        next.push(buildSelectedSong(song))
+        existingIds.add(song.id)
+      })
+      return next
+    })
+
+    setIsRandomPickerOpen(false)
+  }, [
+    activeSongs,
+    activeUpcomingSetSongIds,
+    buildSelectedSong,
+    randomAgePreference,
+    randomApplyMode,
+    randomAvoidUpcoming,
+    randomCount,
+    randomPlayPreference,
+    selectedSongs,
+  ])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -539,6 +676,53 @@ export function CreateSetDialog({
 
   const isGroupSelected = Boolean(selectedGroupId)
 
+  const loadGroupDialogData = useCallback(
+    async (groupValue: string) => {
+      if (!groupValue || isDialogDataLoadingRef.current) return
+      isDialogDataLoadingRef.current = true
+      setError(null)
+      setIsGroupLoading(true)
+      try {
+        const response = await fetch(`/api/groups/${encodeURIComponent(groupValue)}/set-dialog-data`)
+        if (!response.ok) {
+          throw new Error('Failed to load group data')
+        }
+        const payload = (await response.json()) as {
+          group: { id: string; name: string; slug: string }
+          songs: SongWithStats[]
+          arrangements: SongArrangementSummary[]
+          upcomingSetSongIds: string[]
+          lastSetDate: string | null
+          existingSetDates: string[]
+        }
+        setSelectedGroupId(payload.group.id)
+        setActiveGroupSlug(payload.group.slug)
+        setActiveGroupName(payload.group.name)
+        setActiveSongs(payload.songs)
+        setActiveArrangements(payload.arrangements)
+        setActiveUpcomingSetSongIds(payload.upcomingSetSongIds)
+        setActiveLastSetDate(payload.lastSetDate ?? undefined)
+        setActiveExistingSetDates(payload.existingSetDates)
+        setServiceDate(getDefaultServiceDate(payload.lastSetDate ?? undefined))
+      } catch (err) {
+        console.error('Failed to fetch group set dialog data:', err)
+        setError('Unable to load group data. Please try again.')
+        setActiveGroupSlug('')
+        setActiveGroupName('')
+        setActiveSongs([])
+        setActiveArrangements([])
+        setActiveUpcomingSetSongIds([])
+        setActiveLastSetDate(undefined)
+        setActiveExistingSetDates([])
+        setServiceDate(undefined)
+      } finally {
+        setIsGroupLoading(false)
+        isDialogDataLoadingRef.current = false
+      }
+    },
+    [getDefaultServiceDate]
+  )
+
   async function handleGroupChange(nextGroupId: string | null) {
     const nextValue = nextGroupId ?? ''
     const matchedGroup = groups.find((group) => group.id === nextValue || group.slug === nextValue)
@@ -564,44 +748,15 @@ export function CreateSetDialog({
       setActiveGroupName(matchedGroup.name)
     }
 
-    setIsGroupLoading(true)
-    try {
-      const response = await fetch(`/api/groups/${encodeURIComponent(resolvedGroupId)}/set-dialog-data`)
-      if (!response.ok) {
-        throw new Error('Failed to load group data')
-      }
-      const payload = (await response.json()) as {
-        group: { id: string; name: string; slug: string }
-        songs: Song[]
-        arrangements: SongArrangementSummary[]
-        upcomingSetSongIds: string[]
-        lastSetDate: string | null
-        existingSetDates: string[]
-      }
-      setSelectedGroupId(payload.group.id)
-      setActiveGroupSlug(payload.group.slug)
-      setActiveGroupName(payload.group.name)
-      setActiveSongs(payload.songs)
-      setActiveArrangements(payload.arrangements)
-      setActiveUpcomingSetSongIds(payload.upcomingSetSongIds)
-      setActiveLastSetDate(payload.lastSetDate ?? undefined)
-      setActiveExistingSetDates(payload.existingSetDates)
-      setServiceDate(getDefaultServiceDate(payload.lastSetDate ?? undefined))
-    } catch (err) {
-      console.error('Failed to fetch group set dialog data:', err)
-      setError('Unable to load group data. Please try again.')
-      setActiveGroupSlug('')
-      setActiveGroupName('')
-      setActiveSongs([])
-      setActiveArrangements([])
-      setActiveUpcomingSetSongIds([])
-      setActiveLastSetDate(undefined)
-      setActiveExistingSetDates([])
-      setServiceDate(undefined)
-    } finally {
-      setIsGroupLoading(false)
-    }
+    await loadGroupDialogData(resolvedGroupId)
   }
+
+  useEffect(() => {
+    if (!isOpen || !selectedGroupId) return
+    if (!activeSongs.length || !hasSongStats) {
+      void loadGroupDialogData(selectedGroupId)
+    }
+  }, [activeSongs.length, hasSongStats, isOpen, loadGroupDialogData, selectedGroupId])
 
   return (
     <Dialog
@@ -612,6 +767,7 @@ export function CreateSetDialog({
           setError(null)
           setIsDatePickerOpen(false)
           setIsSongPickerOpen(false)
+          setIsRandomPickerOpen(false)
           setSelectedSongs([])
           if (groupId) {
             setSelectedGroupId(groupId)
@@ -752,12 +908,12 @@ export function CreateSetDialog({
                       existingSet: existingSetDateObjects,
                     }}
                     modifiersClassNames={{
-                      existingSet: '[&_button]:relative [&_button]:after:absolute [&_button]:after:bottom-1 [&_button]:after:left-1/2 [&_button]:after:-translate-x-1/2 [&_button]:after:h-1 [&_button]:after:w-1 [&_button]:after:rounded-full [&_button]:after:bg-primary [&_button]:after:z-20 [&_button:hover]:after:bg-primary-foreground [&_button[data-selected-single=true]]:after:bg-primary-foreground',
+                      existingSet: '[&_button]:relative [&_button]:after:absolute [&_button]:after:bottom-1 [&_button]:after:left-1/2 [&_button]:after:-translate-x-1/2 [&_button]:after:h-1 [&_button]:after:w-1 [&_button]:after:rounded-none [&_button]:after:bg-primary [&_button]:after:z-20 [&_button:hover]:after:bg-primary-foreground [&_button[data-selected-single=true]]:after:bg-primary-foreground',
                     }}
                   />
                     {activeExistingSetDates.length > 0 && (
                     <div className="border-t px-3 py-2 text-xs text-muted-foreground flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                      <span className="h-1.5 w-1.5 rounded-none bg-primary" />
                       Dates with existing sets
                     </div>
                   )}
@@ -786,72 +942,231 @@ export function CreateSetDialog({
                   {selectedSongs.length}
                 </span>
               </div>
-              <Popover open={isSongPickerOpen} onOpenChange={setIsSongPickerOpen}>
-                <PopoverTrigger
-                  render={
-                    <Button type="button" variant="outline" size="sm">
-                      <HugeiconsIcon icon={Add01Icon} strokeWidth={2} className="mr-1.5 h-4 w-4" />
-                      Add songs
-                    </Button>
-                  }
-                />
-                <PopoverContent className="w-[320px] p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="Search songs..." />
-                    <CommandList className="max-h-72">
-                      <CommandEmpty>No songs found.</CommandEmpty>
-                      <CommandGroup>
-                        {activeSongs.map((song) => {
-                          const isSelected = selectedSongs.some((item) => item.id === song.id)
-                          const isUpcoming = upcomingSetSongIdSet.has(song.id)
-                          return (
-                            <CommandItem
-                              key={song.id}
-                              value={song.title}
-                              onSelect={() => handleAddSong(song)}
-                              className="cursor-pointer transition-colors data-[selected=true]:bg-muted/70 hover:bg-muted/50 [&>svg:last-child]:hidden"
-                            >
-                              <div className="grid w-full items-center gap-2 grid-cols-[minmax(0,1fr)_auto]">
-                                <span className="min-w-0 truncate">{song.title}</span>
-                                <div className="flex items-center justify-end gap-2">
-                                  {isUpcoming && (
-                                    <Badge
-                                      variant="secondary"
-                                      className="h-5 px-2 text-[10px] whitespace-nowrap"
-                                    >
-                                      Upcoming set
-                                    </Badge>
-                                  )}
-                                  {isSelected ? (
-                                    <HugeiconsIcon
-                                      icon={CheckmarkCircle02Icon}
-                                      strokeWidth={2}
-                                      className="h-4 w-4 text-primary"
-                                    />
-                                  ) : (
-                                    <Button
-                                      type="button"
-                                      size="xs"
-                                      variant="outline"
-                                      className="h-6 px-2 text-[11px]"
-                                      onClick={(event) => {
-                                        event.stopPropagation()
-                                        handleAddSong(song)
-                                      }}
-                                    >
-                                      Add
-                                    </Button>
-                                  )}
+              <div className="flex items-center gap-2">
+                <Popover open={isSongPickerOpen} onOpenChange={setIsSongPickerOpen}>
+                  <PopoverTrigger
+                    render={
+                      <Button type="button" variant="outline" size="sm" className="h-9">
+                        <HugeiconsIcon icon={Add01Icon} strokeWidth={2} className="mr-1.5 h-4 w-4" />
+                        Add songs
+                      </Button>
+                    }
+                  />
+                  <PopoverContent className="w-[320px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search songs..." />
+                      <CommandList className="max-h-72">
+                        <CommandEmpty>No songs found.</CommandEmpty>
+                        <CommandGroup>
+                          {activeSongs.map((song) => {
+                            const isSelected = selectedSongs.some((item) => item.id === song.id)
+                            const isUpcoming = upcomingSetSongIdSet.has(song.id)
+                          const usage = formatSongUsageDate(song.lastUsedDate)
+                          const totalUses = song.totalUses ?? 0
+                          const usesLabel = `Used ${totalUses} ${totalUses === 1 ? 'time' : 'times'}`
+                            return (
+                              <CommandItem
+                                key={song.id}
+                                value={song.title}
+                                onSelect={() => handleAddSong(song)}
+                                className="cursor-pointer transition-colors data-[selected=true]:bg-muted/70 hover:bg-muted/50 [&>svg:last-child]:hidden"
+                              >
+                                <div className="grid w-full items-center gap-2 grid-cols-[minmax(0,1fr)_auto]">
+                                <div className="min-w-0">
+                                  <span className="block min-w-0 truncate text-sm font-medium">
+                                    {song.title}
+                                  </span>
+                                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                                    {usage ? (
+                                      <>
+                                        <Tooltip>
+                                          <TooltipTrigger
+                                            render={(triggerProps) => (
+                                              <span
+                                                {...triggerProps}
+                                                className="cursor-default underline-offset-2 hover:underline"
+                                              >
+                                                Last used {usage.relative}
+                                              </span>
+                                            )}
+                                          />
+                                          <TooltipContent>{usage.absolute}</TooltipContent>
+                                        </Tooltip>
+                                        <span aria-hidden="true">•</span>
+                                        <span>{usesLabel}</span>
+                                      </>
+                                    ) : (
+                                      <span>Never used</span>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            </CommandItem>
+                                  <div className="flex items-center justify-end gap-2">
+                                    {isUpcoming && (
+                                      <Badge
+                                        variant="secondary"
+                                        className="h-5 px-2 text-[10px] whitespace-nowrap"
+                                      >
+                                        Upcoming set
+                                      </Badge>
+                                    )}
+                                    {isSelected ? (
+                                      <HugeiconsIcon
+                                        icon={CheckmarkCircle02Icon}
+                                        strokeWidth={2}
+                                        className="h-4 w-4 text-primary"
+                                      />
+                                    ) : (
+                                      <Button
+                                        type="button"
+                                        size="xs"
+                                        variant="outline"
+                                        className="h-6 px-2 text-[11px]"
+                                        onClick={(event) => {
+                                          event.stopPropagation()
+                                          handleAddSong(song)
+                                        }}
+                                      >
+                                        Add
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              </CommandItem>
+                            )
+                          })}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+
+                <Popover open={isRandomPickerOpen} onOpenChange={setIsRandomPickerOpen}>
+                  <PopoverTrigger
+                  render={(popoverProps) => (
+                      <Tooltip>
+                        <TooltipTrigger
+                        render={(triggerProps) => {
+                          const mergedProps = mergeProps<'button'>(popoverProps, triggerProps)
+                          const { ref: mergedRef, ...restProps } = mergedProps
+                          return (
+                            <Button
+                              {...restProps}
+                              ref={composeRefs(mergedRef, popoverProps.ref, triggerProps.ref)}
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="h-9 w-9"
+                              aria-label="Random pick"
+                            >
+                              <HugeiconsIcon icon={ShuffleIcon} strokeWidth={2} className="h-4 w-4" />
+                            </Button>
                           )
-                        })}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+                        }}
+                        />
+                        <TooltipContent>Random pick</TooltipContent>
+                      </Tooltip>
+                  )}
+                  />
+                <PopoverContent className="w-[280px] p-4 rounded-none" align="end">
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="random-pick-count" className="text-xs text-muted-foreground">
+                          How many
+                        </Label>
+                        <Input
+                          id="random-pick-count"
+                          type="number"
+                          min={1}
+                          max={maxRandomCount}
+                          value={randomCount}
+                          onChange={(event) => {
+                            const nextValue = Number(event.target.value)
+                            if (!Number.isFinite(nextValue)) return
+                            const clamped = Math.max(1, Math.min(nextValue, maxRandomCount))
+                            setRandomCount(clamped)
+                          }}
+                        className="h-8 rounded-none"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {randomCandidateCount} available candidates
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground">Play frequency</Label>
+                      <RadioCardGroup
+                        value={randomPlayPreference}
+                        onValueChange={(value) => setRandomPlayPreference(value as PlayPreference)}
+                        options={[
+                          { value: 'less', label: 'Less', icon: ArrowDown01Icon },
+                          { value: 'neutral', label: 'Neutral', icon: ArrowUpDownIcon },
+                          { value: 'more', label: 'More', icon: ArrowUp01Icon },
+                        ]}
+                      />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground">Song age</Label>
+                      <RadioCardGroup
+                        value={randomAgePreference}
+                        onValueChange={(value) => setRandomAgePreference(value as AgePreference)}
+                        options={[
+                          { value: 'older', label: 'Older', icon: Clock01Icon },
+                          { value: 'neutral', label: 'Neutral', icon: ArrowUpDownIcon },
+                          { value: 'newer', label: 'Newer', icon: CalendarAdd01Icon },
+                        ]}
+                      />
+                      </div>
+
+                      <div
+                        className={cn(
+                          'flex items-center justify-between gap-2 border border-border/70 px-2 py-2 rounded-none transition-colors',
+                          randomAvoidUpcoming && 'border-primary/50'
+                        )}
+                      >
+                        <Label
+                          className={cn(
+                            'text-xs',
+                            randomAvoidUpcoming ? 'text-foreground' : 'text-muted-foreground'
+                          )}
+                        >
+                          Avoid upcoming sets
+                        </Label>
+                        <Checkbox
+                          checked={randomAvoidUpcoming}
+                          onCheckedChange={(value) => setRandomAvoidUpcoming(Boolean(value))}
+                          aria-label="Avoid songs in upcoming sets"
+                        className="rounded-none"
+                        />
+                      </div>
+
+                      {selectedSongs.length > 0 && (
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground">Apply mode</Label>
+                          <RadioCardGroup
+                            value={randomApplyMode}
+                            onValueChange={(value) => setRandomApplyMode(value as 'append' | 'replace')}
+                            options={[
+                              { value: 'append', label: 'Append', icon: Add01Icon },
+                              { value: 'replace', label: 'Replace', icon: Exchange01Icon },
+                            ]}
+                          />
+                        </div>
+                      )}
+
+                      <Button
+                        type="button"
+                        size="sm"
+                      className="w-full rounded-none"
+                        onClick={handleRandomPick}
+                        disabled={randomCandidateCount === 0 || randomCount < 1}
+                      >
+                        Pick songs
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
 
             {selectedSongs.length === 0 ? (
@@ -861,11 +1176,10 @@ export function CreateSetDialog({
                 </CardContent>
               </Card>
             ) : (
-              <ScrollArea
-                className="max-h-60 w-full overflow-x-hidden"
+              <div
+                className={`max-h-60 w-full overflow-y-auto overflow-x-hidden${isDraggingList ? ' overscroll-contain' : ''}`}
                 onWheel={isDraggingList ? (event) => event.preventDefault() : undefined}
                 onTouchMove={isDraggingList ? (event) => event.preventDefault() : undefined}
-                style={isDraggingList ? { overscrollBehavior: 'contain' } : undefined}
               >
                 <TooltipProvider delay={200}>
                   <DndContext
@@ -908,8 +1222,7 @@ export function CreateSetDialog({
                     </SortableContext>
                   </DndContext>
                 </TooltipProvider>
-                <ScrollBar orientation="vertical" />
-              </ScrollArea>
+              </div>
             )}
             <input
               type="hidden"

@@ -228,8 +228,8 @@ function SortableSongRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 text-base font-semibold text-foreground">
+              <div className="flex items-baseline gap-3">
+                <div className="text-base font-semibold text-foreground">
                   #{position}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -243,7 +243,7 @@ function SortableSongRow({
                     setSong.key_override ||
                     setSong.songs.notes ||
                     setSong.notes) && (
-                    <div className="mt-3 border-t border-border/60 pt-3">
+                    <div className="mt-2">
                       {(setSong.song_arrangements?.name || setSong.key_override) && (
                         <div className="flex flex-wrap items-center gap-2 text-xs">
                           {setSong.song_arrangements?.name && (

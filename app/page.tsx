@@ -35,7 +35,7 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card">
+      <header className="border-b border-border bg-card print:hidden">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 md:flex-row md:items-center md:justify-between">
           <div className="flex items-start gap-4">
             <AppLogo aria-hidden className="mt-0.5 h-10 w-10 text-primary" />
@@ -98,7 +98,7 @@ export default async function HomePage() {
                               className="flex flex-col gap-2 rounded-none border border-border/60 px-3 py-3"
                             >
                               <div className="flex items-start gap-3">
-                                <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full border border-border/60 text-xs font-semibold">
+                                <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-none border border-border/60 text-xs font-semibold">
                                   {index + 1}
                                 </div>
                                 <div className="flex-1">
@@ -197,7 +197,7 @@ export default async function HomePage() {
             )}
           </div>
 
-          <aside className="space-y-6">
+          <aside className="space-y-6 print:hidden">
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Quick links</CardTitle>

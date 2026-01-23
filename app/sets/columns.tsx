@@ -1,8 +1,10 @@
 "use client"
 
+import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { type ColumnDef } from "@tanstack/react-table"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowUpDownIcon, MoreHorizontalIcon } from "@hugeicons/core-free-icons"
+import { ArrowUpDownIcon, MoreHorizontalIcon, Edit01Icon, Delete02Icon, EyeIcon, MusicNote03Icon, CalendarAdd01Icon } from "@hugeicons/core-free-icons"
 
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
@@ -15,6 +17,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogContent,
+} from "@/components/ui/alert-dialog"
+import { EditSetDialogContent } from "@/components/edit-set-dialog-content"
+import { DeleteSetDialogContent } from "@/components/delete-set-dialog-content"
 import { cn } from "@/lib/utils"
 
 export type SetRow = {
@@ -131,41 +140,103 @@ export const columns: ColumnDef<SetRow>[] = [
     enableHiding: false,
     cell: ({ row }) => {
       const set = row.original
-      return (
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "p-0")}
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
-          >
-            <span className="sr-only">Open menu</span>
-            <HugeiconsIcon icon={MoreHorizontalIcon} strokeWidth={2} className="h-4 w-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuGroup>
-              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-              <DropdownMenuItem
-                onClick={() =>
-                  navigator.clipboard.writeText(
-                    `/groups/${set.groupSlug}/sets/${set.id}`
-                  )
-                }
-              >
-                Copy link
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => (window.location.href = `/groups/${set.groupSlug}/sets/${set.id}`)}
-              >
-                View set
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => (window.location.href = `/groups/${set.groupSlug}`)}>
-                View group
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )
+      return <SetActionsCell set={set} />
     },
   },
 ]
+
+function SetActionsCell({ set }: { set: SetRow }) {
+  const router = useRouter()
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+
+  const handleEditSuccess = () => {
+    setEditDialogOpen(false)
+    router.refresh()
+  }
+
+  const handleDeleteSuccess = () => {
+    setDeleteDialogOpen(false)
+    router.refresh()
+  }
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "p-0")}
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <span className="sr-only">Open menu</span>
+          <HugeiconsIcon icon={MoreHorizontalIcon} strokeWidth={2} className="h-4 w-4" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+          <DropdownMenuGroup onClick={(e) => e.stopPropagation()}>
+            <DropdownMenuLabel onClick={(e) => e.stopPropagation()}>Actions</DropdownMenuLabel>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation()
+                setEditDialogOpen(true)
+              }}
+            >
+              <HugeiconsIcon icon={Edit01Icon} strokeWidth={2} className="mr-2 h-4 w-4" />
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={(e) => {
+                e.stopPropagation()
+                setDeleteDialogOpen(true)
+              }}
+            >
+              <HugeiconsIcon icon={Delete02Icon} strokeWidth={2} className="mr-2 h-4 w-4" />
+              Delete
+            </DropdownMenuItem>
+            <DropdownMenuSeparator onClick={(e) => e.stopPropagation()} />
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation()
+                router.push(`/groups/${set.groupSlug}/sets/${set.id}`)
+              }}
+            >
+              <HugeiconsIcon icon={CalendarAdd01Icon} strokeWidth={2} className="mr-2 h-4 w-4" />
+              View set
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation()
+                router.push(`/groups/${set.groupSlug}`)
+              }}
+            >
+              <HugeiconsIcon icon={MusicNote03Icon} strokeWidth={2} className="mr-2 h-4 w-4" />
+              View group
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent>
+          <EditSetDialogContent
+            setId={set.id}
+            initialServiceDate={set.serviceDate}
+            initialNotes={set.notes || null}
+            onSuccess={handleEditSuccess}
+            onCancel={() => setEditDialogOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent size="sm">
+          <DeleteSetDialogContent
+            setId={set.id}
+            onSuccess={handleDeleteSuccess}
+            onCancel={() => setDeleteDialogOpen(false)}
+          />
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}

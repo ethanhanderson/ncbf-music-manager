@@ -5,16 +5,10 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { deleteSet } from '@/lib/actions/sets'
+import { DeleteSetDialogContent } from '@/components/delete-set-dialog-content'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Delete02Icon } from '@hugeicons/core-free-icons'
 
@@ -24,24 +18,16 @@ interface DeleteSetButtonProps {
 }
 
 export function DeleteSetButton({ setId, groupSlug }: DeleteSetButtonProps) {
-  const [isDeleting, setIsDeleting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
+  const [isOpen, setIsOpen] = useState(false)
 
-  async function handleDelete() {
-    setIsDeleting(true)
-    setError(null)
-    const result = await deleteSet(setId)
-    if (result.success) {
-      router.push(`/groups/${groupSlug}`)
-    } else {
-      setError(result.error || 'Failed to delete set')
-      setIsDeleting(false)
-    }
+  const handleSuccess = () => {
+    setIsOpen(false)
+    router.push(`/groups/${groupSlug}`)
   }
 
   return (
-    <AlertDialog>
+    <AlertDialog open={isOpen} onOpenChange={setIsOpen}>
       <AlertDialogTrigger
         render={
           <Button variant="destructive" size="sm">
@@ -51,26 +37,11 @@ export function DeleteSetButton({ setId, groupSlug }: DeleteSetButtonProps) {
         }
       />
       <AlertDialogContent size="sm">
-        <AlertDialogHeader>
-          <AlertDialogTitle>Delete this set?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This action cannot be undone. The set will be removed from this group.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        {error && <p className="text-xs text-destructive">{error}</p>}
-        <AlertDialogFooter>
-          <AlertDialogCancel size="sm" disabled={isDeleting}>
-            Cancel
-          </AlertDialogCancel>
-          <AlertDialogAction
-            size="sm"
-            variant="destructive"
-            onClick={handleDelete}
-            disabled={isDeleting}
-          >
-            {isDeleting ? 'Deleting...' : 'Delete set'}
-          </AlertDialogAction>
-        </AlertDialogFooter>
+        <DeleteSetDialogContent
+          setId={setId}
+          onSuccess={handleSuccess}
+          onCancel={() => setIsOpen(false)}
+        />
       </AlertDialogContent>
     </AlertDialog>
   )

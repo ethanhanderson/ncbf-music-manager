@@ -42,7 +42,7 @@ export default async function SetPage({ params }: SetPageProps) {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border bg-card">
+      <header className="border-b border-border bg-card print:hidden">
         <div className="mx-auto max-w-6xl px-4 py-6">
           <Breadcrumb>
             <BreadcrumbList>
@@ -133,7 +133,7 @@ export default async function SetPage({ params }: SetPageProps) {
           </section>
 
           {/* Sidebar */}
-          <aside className="space-y-6">
+          <aside className="space-y-6 print:hidden">
             {/* Export */}
             <Card>
               <CardHeader>

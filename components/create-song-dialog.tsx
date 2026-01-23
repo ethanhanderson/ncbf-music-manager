@@ -1,44 +1,27 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { SingleFileUploader } from '@/components/ui/single-file-uploader'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { ButtonGroup } from '@/components/ui/button-group'
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+
 import {
   createSong,
   checkForDuplicateSong,
+  checkForDuplicateLyrics,
   extractTextFromFile,
   type DuplicateCheckResult,
 } from '@/lib/actions/songs'
-import { HugeiconsIcon } from '@hugeicons/react'
-import {
-  Add01Icon,
-  CloudUploadIcon,
-  Loading01Icon,
-  ArrowLeft01Icon,
-  InformationCircleIcon,
-  Copy01Icon,
-  ArrowDataTransferHorizontalIcon,
-} from '@hugeicons/core-free-icons'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { type MusicGroup } from '@/lib/supabase/server'
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
+import { HugeiconsIcon } from '@hugeicons/react'
+import { Add01Icon, InformationCircleIcon, Copy01Icon, ArrowDataTransferHorizontalIcon, Loading01Icon } from '@hugeicons/core-free-icons'
 
 interface CreateSongDialogProps {
   groupId?: string
@@ -48,14 +31,33 @@ interface CreateSongDialogProps {
   trigger?: React.ReactElement
 }
 
-type DuplicateAction = 'skip' | 'duplicate' | 'override'
+function parseSongInfoFromText(text: string): {
+  defaultKey?: string
+  ccliId?: string
+  artist?: string
+  linkUrl?: string
+} {
+  const result: { defaultKey?: string; ccliId?: string; artist?: string; linkUrl?: string } = {}
+  const t = text || ''
 
-interface PendingUpload {
-  file?: File
-  title: string
-  lyrics?: string
-  extractedText?: string
-  duplicateInfo: DuplicateCheckResult
+  const ccliMatch = t.match(/CCLI\s*(?:#|ID)?\s*[:\-]?\s*(\d{4,})/i)
+  if (ccliMatch?.[1]) result.ccliId = ccliMatch[1]
+
+  const keyMatch = t.match(/\bKey\b\s*[:\-]?\s*([A-G](?:#|b)?m?)/i)
+  if (keyMatch?.[1]) result.defaultKey = keyMatch[1]
+
+  const artistMatch =
+    t.match(/\b(?:Artist|Author|Written by|Words(?:\s+and\s+Music)?\s+by|Music\s+by)\b\s*[:\-]?\s*(.+)/i) ??
+    null
+  if (artistMatch?.[1]) {
+    const line = artistMatch[1].split('\n')[0]?.trim()
+    if (line) result.artist = line
+  }
+
+  const urlMatch = t.match(/https?:\/\/\S+/i)
+  if (urlMatch?.[0]) result.linkUrl = urlMatch[0].replace(/[),.;]+$/, '')
+
+  return result
 }
 
 export function CreateSongDialog({
@@ -65,23 +67,17 @@ export function CreateSongDialog({
   defaultGroupSlug,
   trigger,
 }: CreateSongDialogProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [mode, setMode] = useState<'upload' | 'manual'>('upload')
-  const [isLoading, setIsLoading] = useState(false)
-  const [dragOver, setDragOver] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [selectedGroupSlug, setSelectedGroupSlug] = useState(
-    defaultGroupSlug ?? groups?.[0]?.slug ?? groupSlug ?? ''
-  )
-  
-  // Duplicate detection state
-  const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null)
-  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false)
-  
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
   const supportedFormats = ['.txt', '.rtf', '.docx', '.pdf']
+
+  const [isOpen, setIsOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const [selectedGroupSlug, setSelectedGroupSlug] = useState(
+    defaultGroupSlug ?? groups?.[0]?.slug ?? groupSlug ?? ''
+  )
 
   const activeGroup: { id: string; slug: string; name?: string } | null = (() => {
     if (groups?.length) {
@@ -92,31 +88,78 @@ export function CreateSongDialog({
     return null
   })()
 
-  function resetState(open = false) {
+  // Step 1: choose file or skip
+  const [fileUploaderKey, setFileUploaderKey] = useState(0)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [isParsingFile, setIsParsingFile] = useState(false)
+
+  // Step 2: unified details dialog (used by both flows)
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [title, setTitle] = useState('')
+  const [lyrics, setLyrics] = useState('')
+  const [defaultKey, setDefaultKey] = useState('')
+  const [ccliId, setCcliId] = useState('')
+  const [artist, setArtist] = useState('')
+  const [linkUrl, setLinkUrl] = useState('')
+  const [extractedTitle, setExtractedTitle] = useState<string | null>(null)
+
+  const [duplicateInfo, setDuplicateInfo] = useState<DuplicateCheckResult | null>(null)
+  const [duplicateDecision, setDuplicateDecision] = useState<'duplicate' | 'override' | null>(null)
+
+  function resetAll(open = false) {
     setIsOpen(open)
-    setMode('upload')
     setIsLoading(false)
     setError(null)
-    setDragOver(false)
-    setPendingUpload(null)
-    setShowDuplicateDialog(false)
+
+    setSelectedFile(null)
+    setFileUploaderKey((x) => x + 1)
+    setIsParsingFile(false)
+
+    setDetailsOpen(false)
+    setTitle('')
+    setLyrics('')
+    setDefaultKey('')
+    setCcliId('')
+    setArtist('')
+    setLinkUrl('')
+    setExtractedTitle(null)
+    setDuplicateInfo(null)
+    setDuplicateDecision(null)
   }
 
-  async function handleFileUpload(file: File) {
-    setIsLoading(true)
+  function openDetailsManual() {
     setError(null)
+    setExtractedTitle(null)
+    setTitle('')
+    setLyrics('')
+    setDefaultKey('')
+    setCcliId('')
+    setArtist('')
+    setLinkUrl('')
+    setDuplicateInfo(null)
+    setDuplicateDecision(null)
+    setSelectedFile(null)
+    setDetailsOpen(true)
+  }
 
+  async function openDetailsFromFile() {
     if (!activeGroup) {
       setError('Please choose a group')
-      setIsLoading(false)
+      return
+    }
+    if (!selectedFile) {
+      setError('Please choose a file')
       return
     }
 
+    setIsLoading(true)
+    setError(null)
+    // keep any pre-check duplicateInfo/decision from file selection
+
     try {
-      // First extract text from the file
-      const formData = new FormData()
-      formData.append('file', file)
-      const extractResult = await extractTextFromFile(formData)
+      const fd = new FormData()
+      fd.append('file', selectedFile)
+      const extractResult = await extractTextFromFile(fd)
 
       if (!extractResult.success) {
         setError(extractResult.error || 'Failed to extract text from file')
@@ -124,279 +167,130 @@ export function CreateSongDialog({
         return
       }
 
-      const title = extractResult.title || file.name.split('.').slice(0, -1).join('.')
+      const parsedTitle = (extractResult.title || selectedFile.name.split('.').slice(0, -1).join('.')).trim()
+      const parsedLyrics = (extractResult.text ?? '').trim()
 
-      // Check for duplicates
-      const duplicateCheck = await checkForDuplicateSong(
-        activeGroup.id,
-        title,
-        extractResult.text
-      )
+      setExtractedTitle(parsedTitle || null)
+      setTitle(parsedTitle)
+      setLyrics(parsedLyrics)
 
-      if (duplicateCheck.isDuplicate) {
-        // Show duplicate dialog
-        setPendingUpload({
-          file,
-          title,
-          extractedText: extractResult.text,
-          duplicateInfo: duplicateCheck,
-        })
-        setShowDuplicateDialog(true)
-        setIsLoading(false)
-        return
-      }
+      const parsedInfo = parseSongInfoFromText(parsedLyrics)
+      if (parsedInfo.defaultKey) setDefaultKey(parsedInfo.defaultKey)
+      if (parsedInfo.ccliId) setCcliId(parsedInfo.ccliId)
+      if (parsedInfo.artist) setArtist(parsedInfo.artist)
+      if (parsedInfo.linkUrl) setLinkUrl(parsedInfo.linkUrl)
 
-      // No duplicate, proceed with creation
-      await proceedWithCreation(file)
-    } catch (error) {
-      console.error('Error handling file upload:', error)
+      setDetailsOpen(true)
+      setIsLoading(false)
+    } catch (err) {
+      console.error('Error parsing file:', err)
       setError('An unexpected error occurred')
       setIsLoading(false)
     }
   }
 
-  async function handleManualSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
+  async function handleCreate() {
+    if (!activeGroup) {
+      setError('Please choose a group')
+      return
+    }
+    if (!title.trim()) {
+      setError('Title is required')
+      return
+    }
+
     setIsLoading(true)
     setError(null)
 
-    if (!activeGroup) {
-      setError('Please choose a group')
-      setIsLoading(false)
-      return
-    }
-
-    const formData = new FormData(e.currentTarget)
-    const title = formData.get('title') as string
-    const lyrics = formData.get('lyrics') as string | null
-
-    if (!title?.trim()) {
-      setError('Title is required')
-      setIsLoading(false)
-      return
-    }
-
     try {
-      // Check for duplicates
-      const duplicateCheck = await checkForDuplicateSong(
-        activeGroup.id,
-        title.trim(),
-        lyrics?.trim()
-      )
+      // Check duplicates before creating (same flow for file/manual)
+      if (!duplicateDecision) {
+        const check = await checkForDuplicateSong(activeGroup.id, title.trim(), lyrics.trim() || undefined)
+        if (check.isDuplicate) {
+          setDuplicateInfo(check)
+          setIsLoading(false)
+          return
+        }
+        setDuplicateInfo(null)
+      }
 
-      if (duplicateCheck.isDuplicate) {
-        // Show duplicate dialog
-        setPendingUpload({
-          title: title.trim(),
-          lyrics: lyrics?.trim() || undefined,
-          duplicateInfo: duplicateCheck,
-        })
-        setShowDuplicateDialog(true)
-        setIsLoading(false)
+      const overrideExistingId =
+        duplicateDecision === 'override' ? duplicateInfo?.existingSong?.id ?? null : null
+
+      const formData = new FormData()
+      formData.append('title', title.trim())
+      formData.append('lyrics', lyrics)
+
+      if (defaultKey.trim()) formData.append('default_key', defaultKey.trim())
+      if (ccliId.trim()) formData.append('ccli_id', ccliId.trim())
+      if (artist.trim()) formData.append('artist', artist.trim())
+      if (linkUrl.trim()) formData.append('link_url', linkUrl.trim())
+
+      if (overrideExistingId) formData.append('overrideExistingId', overrideExistingId)
+      if (selectedFile) formData.append('file', selectedFile)
+
+      const result = await createSong(activeGroup.id, activeGroup.slug, formData)
+
+      if (result.success && result.song) {
+        resetAll(false)
+        router.push(`/groups/${activeGroup.slug}/songs/${result.song.id}`)
         return
       }
 
-      // No duplicate, proceed with creation
-      await proceedWithManualCreation(formData)
-    } catch (error) {
-      console.error('Error handling manual submit:', error)
+      setError(result.error || 'Failed to create song')
+      setIsLoading(false)
+    } catch (err) {
+      console.error('Error creating song:', err)
       setError('An unexpected error occurred')
       setIsLoading(false)
     }
   }
 
-  async function proceedWithCreation(file: File, overrideExistingId?: string) {
+  async function parseFileAndPrecheckDuplicate(file: File) {
     if (!activeGroup) return
 
-    setIsLoading(true)
-    setShowDuplicateDialog(false)
-
-    const formData = new FormData()
-    formData.append('file', file)
-    if (overrideExistingId) {
-      formData.append('overrideExistingId', overrideExistingId)
-    }
+    setIsParsingFile(true)
+    setError(null)
+    setDuplicateInfo(null)
+    setDuplicateDecision(null)
 
     try {
-      const result = await createSong(activeGroup.id, activeGroup.slug, formData)
-
-      if (result.success && result.song) {
-        resetState(false)
-        router.push(`/groups/${activeGroup.slug}/songs/${result.song.id}`)
-      } else {
-        setError(result.error || 'Failed to create song from file')
-        setIsLoading(false)
+      const fd = new FormData()
+      fd.append('file', file)
+      const extractResult = await extractTextFromFile(fd)
+      if (!extractResult.success) {
+        setError(extractResult.error || 'Failed to extract text from file')
+        setIsParsingFile(false)
+        return
       }
-    } catch (error) {
-      console.error('Error creating song from file:', error)
-      setError('An unexpected error occurred')
-      setIsLoading(false)
-    }
-  }
 
-  async function proceedWithManualCreation(formData: FormData, overrideExistingId?: string) {
-    if (!activeGroup) return
+      const parsedTitle = (extractResult.title || file.name.split('.').slice(0, -1).join('.')).trim()
+      const parsedLyrics = (extractResult.text ?? '').trim()
 
-    setIsLoading(true)
-    setShowDuplicateDialog(false)
+      // Prime details view so "Continue" is fast
+      setExtractedTitle(parsedTitle || null)
+      setTitle(parsedTitle)
+      setLyrics(parsedLyrics)
 
-    if (overrideExistingId) {
-      formData.append('overrideExistingId', overrideExistingId)
-    }
+      const parsedInfo = parseSongInfoFromText(parsedLyrics)
+      if (parsedInfo.defaultKey) setDefaultKey(parsedInfo.defaultKey)
+      if (parsedInfo.ccliId) setCcliId(parsedInfo.ccliId)
+      if (parsedInfo.artist) setArtist(parsedInfo.artist)
+      if (parsedInfo.linkUrl) setLinkUrl(parsedInfo.linkUrl)
 
-    try {
-      const result = await createSong(activeGroup.id, activeGroup.slug, formData)
-
-      if (result.success && result.song) {
-        resetState(false)
-        router.push(`/groups/${activeGroup.slug}/songs/${result.song.id}`)
+      // Lyrics-only duplicate check (even if title differs)
+      const lyricDup = await checkForDuplicateLyrics(activeGroup.id, parsedLyrics)
+      if (lyricDup.isDuplicate) {
+        setDuplicateInfo(lyricDup)
       } else {
-        setError(result.error || 'Failed to create song')
-        setIsLoading(false)
+        setDuplicateInfo(null)
       }
-    } catch (error) {
-      console.error('Error creating song manually:', error)
-      setError('An unexpected error occurred')
-      setIsLoading(false)
+    } catch (err) {
+      console.error('Failed to precheck duplicate:', err)
+      setError('Failed to analyze file')
+    } finally {
+      setIsParsingFile(false)
     }
-  }
-
-  async function handleDuplicateAction(action: DuplicateAction) {
-    if (!pendingUpload || !activeGroup) return
-
-    if (action === 'skip') {
-      // Cancel and close
-      resetState(false)
-      return
-    }
-
-    const overrideId = action === 'override' 
-      ? pendingUpload.duplicateInfo.existingSong?.id 
-      : undefined
-
-    if (pendingUpload.file) {
-      await proceedWithCreation(pendingUpload.file, overrideId)
-    } else {
-      const formData = new FormData()
-      formData.append('title', pendingUpload.title)
-      if (pendingUpload.lyrics) formData.append('lyrics', pendingUpload.lyrics)
-      await proceedWithManualCreation(formData, overrideId)
-    }
-  }
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (file) {
-      handleFileUpload(file)
-    }
-  }
-
-  function handleDrop(e: React.DragEvent) {
-    e.preventDefault()
-    setDragOver(false)
-    const file = e.dataTransfer.files?.[0]
-    if (file) {
-      handleFileUpload(file)
-    }
-  }
-
-  function handleDragOver(e: React.DragEvent) {
-    e.preventDefault()
-    setDragOver(true)
-  }
-
-  function handleDragLeave(e: React.DragEvent) {
-    e.preventDefault()
-    setDragOver(false)
-  }
-
-  // Duplicate confirmation dialog content
-  if (showDuplicateDialog && pendingUpload) {
-    return (
-      <Dialog open={isOpen} onOpenChange={(open) => !open && resetState(false)}>
-        <DialogTrigger render={<Button size="sm" />}>
-          <HugeiconsIcon icon={Add01Icon} strokeWidth={2} className="mr-1.5 h-4 w-4" />
-          Add Song
-        </DialogTrigger>
-
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={2} className="h-5 w-5 text-amber-500" />
-              Duplicate Song Found
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="p-4 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-900">
-              <p className="text-sm text-amber-800 dark:text-amber-200 mb-2">
-                {pendingUpload.duplicateInfo.matchType === 'title_and_lyrics'
-                  ? 'A song with the same title and lyrics already exists in this group.'
-                  : 'A song with the same title already exists in this group.'}
-              </p>
-                {pendingUpload.duplicateInfo.existingSong && (
-                <div className="text-sm">
-                  <p className="font-medium text-foreground">
-                    Existing: {pendingUpload.duplicateInfo.existingSong.title}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <p className="text-sm text-muted-foreground">
-              What would you like to do?
-            </p>
-
-            <div className="space-y-2">
-              <Button
-                variant="outline"
-                className="w-full justify-start h-auto py-3"
-                onClick={() => handleDuplicateAction('skip')}
-                disabled={isLoading}
-              >
-                <div className="text-left">
-                  <p className="font-medium">Cancel</p>
-                  <p className="text-xs text-muted-foreground">Don&apos;t create this song</p>
-                </div>
-              </Button>
-
-              <Button
-                variant="outline"
-                className="w-full justify-start h-auto py-3"
-                onClick={() => handleDuplicateAction('duplicate')}
-                disabled={isLoading}
-              >
-                <HugeiconsIcon icon={Copy01Icon} strokeWidth={2} className="mr-3 h-4 w-4 shrink-0" />
-                <div className="text-left">
-                  <p className="font-medium">Create Duplicate</p>
-                  <p className="text-xs text-muted-foreground">Add as a new song anyway</p>
-                </div>
-              </Button>
-
-              <Button
-                variant="outline"
-                className="w-full justify-start h-auto py-3"
-                onClick={() => handleDuplicateAction('override')}
-                disabled={isLoading}
-              >
-                <HugeiconsIcon icon={ArrowDataTransferHorizontalIcon} strokeWidth={2} className="mr-3 h-4 w-4 shrink-0" />
-                <div className="text-left">
-                  <p className="font-medium">Replace Existing</p>
-                  <p className="text-xs text-muted-foreground">Update the existing song&apos;s slides</p>
-                </div>
-              </Button>
-            </div>
-
-            {isLoading && (
-              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                <HugeiconsIcon icon={Loading01Icon} strokeWidth={2} className="h-4 w-4 animate-spin" />
-                Processing...
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-    )
   }
 
   return (
@@ -404,16 +298,13 @@ export function CreateSongDialog({
       open={isOpen}
       onOpenChange={(open) => {
         if (!open) {
-          resetState(false)
+          resetAll(false)
           return
         }
         setIsOpen(true)
       }}
     >
-      <DialogTrigger
-        nativeButton={trigger ? false : true}
-        render={trigger || <Button size="sm" />}
-      >
+      <DialogTrigger nativeButton={trigger ? false : true} render={trigger || <Button size="sm" />}>
         {!trigger && (
           <>
             <HugeiconsIcon icon={Add01Icon} strokeWidth={2} className="mr-1.5 h-4 w-4" />
@@ -428,12 +319,9 @@ export function CreateSongDialog({
         </DialogHeader>
 
         {groups && groups.length > 1 && (
-          <div className="space-y-2 mb-4">
+          <div className="space-y-2">
             <Label>Group</Label>
-            <Select
-              value={selectedGroupSlug}
-              onValueChange={(value) => setSelectedGroupSlug(value ?? "")}
-            >
+            <Select value={selectedGroupSlug} onValueChange={(value) => setSelectedGroupSlug(value ?? '')}>
               <SelectTrigger className="h-10 w-full data-[size=default]:h-10">
                 <SelectValue placeholder="Choose group">
                   {(value) => {
@@ -452,137 +340,320 @@ export function CreateSongDialog({
             </Select>
           </div>
         )}
-        
-        {mode === 'upload' ? (
-          <div className="space-y-6">
-            <div className="space-y-3">
-              <div
-                className={`border-2 border-dashed rounded-none p-8 text-center transition-colors cursor-pointer ${
-                  dragOver ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground'
-                } ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}
-                onDrop={handleDrop}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept={supportedFormats.join(',')}
-                  onChange={handleFileChange}
-                  className="hidden"
-                  disabled={isLoading}
-                />
-                
-                {isLoading ? (
-                  <div className="space-y-2">
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Upload a lyric file</p>
+
+            {/* Duplicate banner shown BEFORE Continue */}
+            {duplicateInfo?.isDuplicate && (
+              <div className="space-y-2">
+                <Alert className="border-primary/20 bg-primary/10 text-foreground">
+                  <HugeiconsIcon
+                    icon={InformationCircleIcon}
+                    strokeWidth={2}
+                    className="text-primary"
+                  />
+                  <AlertTitle>Duplicate lyrics found</AlertTitle>
+                  <AlertDescription>
+                    {duplicateInfo.matchType === 'title_and_lyrics'
+                      ? 'A song with the same title and lyrics already exists in this group.'
+                      : duplicateInfo.matchType === 'title'
+                        ? 'A song with the same title already exists in this group.'
+                        : 'These lyrics look like an existing song in this group.'}
+                    {duplicateInfo.existingSong?.title ? (
+                      <>
+                        {' '}
+                        Existing: <span className="font-medium">{duplicateInfo.existingSong.title}</span>
+                      </>
+                    ) : null}
+                  </AlertDescription>
+                </Alert>
+
+                <ButtonGroup className="w-full">
+                  <Button
+                    variant="outline"
+                    className="flex-1 justify-center"
+                    disabled={isLoading || isParsingFile}
+                    onClick={() => {
+                      setSelectedFile(null)
+                      setDuplicateInfo(null)
+                      setDuplicateDecision(null)
+                      setFileUploaderKey((x) => x + 1)
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant={duplicateDecision === 'duplicate' ? 'default' : 'outline'}
+                    className="flex-1 justify-center"
+                    disabled={isLoading || isParsingFile}
+                    onClick={() => setDuplicateDecision('duplicate')}
+                  >
+                    <HugeiconsIcon icon={Copy01Icon} strokeWidth={2} className="mr-1.5 h-4 w-4" />
+                    Create duplicate
+                  </Button>
+                  <Button
+                    variant={duplicateDecision === 'override' ? 'default' : 'outline'}
+                    className="flex-1 justify-center"
+                    disabled={isLoading || isParsingFile || !duplicateInfo.existingSong?.id}
+                    onClick={() => setDuplicateDecision('override')}
+                  >
+                    <HugeiconsIcon icon={ArrowDataTransferHorizontalIcon} strokeWidth={2} className="mr-1.5 h-4 w-4" />
+                    Replace
+                  </Button>
+                </ButtonGroup>
+              </div>
+            )}
+
+            <SingleFileUploader
+              key={fileUploaderKey}
+              accept={supportedFormats.join(',')}
+              disabled={!activeGroup || isLoading || isParsingFile}
+              isBusy={isLoading || isParsingFile}
+              helpText={`Supported: ${supportedFormats.join(', ')}`}
+              onFileSelected={(file) => {
+                setSelectedFile(file)
+                setError(null)
+                parseFileAndPrecheckDuplicate(file)
+              }}
+              onFileCleared={() => {
+                setSelectedFile(null)
+                setError(null)
+                setFileUploaderKey((x) => x + 1)
+                setDuplicateInfo(null)
+                setDuplicateDecision(null)
+                setIsParsingFile(false)
+              }}
+            />
+          </div>
+
+          <Button
+            className="w-full"
+            disabled={
+              !activeGroup ||
+              !selectedFile ||
+              isLoading ||
+              isParsingFile ||
+              Boolean(duplicateInfo?.isDuplicate && !duplicateDecision)
+            }
+            onClick={openDetailsFromFile}
+          >
+            {isLoading || isParsingFile ? (
+              <>
+                <HugeiconsIcon icon={Loading01Icon} strokeWidth={2} className="mr-1.5 h-4 w-4 animate-spin" />
+                {isParsingFile ? 'Checking…' : 'Parsing…'}
+              </>
+            ) : (
+              'Continue'
+            )}
+          </Button>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">Or</span>
+            </div>
+          </div>
+
+          <Button
+            variant="outline"
+            className="w-full"
+            disabled={!activeGroup || isLoading}
+            onClick={openDetailsManual}
+          >
+            Skip upload and enter details manually
+          </Button>
+
+          {error && <p className="text-sm text-destructive text-center">{error}</p>}
+        </div>
+
+        {/* Unified nested details dialog for BOTH upload and manual */}
+        <Dialog open={detailsOpen} onOpenChange={(open) => setDetailsOpen(open)}>
+          <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col" showOverlay={false}>
+            <DialogHeader>
+              <DialogTitle>Song details</DialogTitle>
+            </DialogHeader>
+
+            <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
+              <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto pr-1 pb-2">
+              {selectedFile && (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Uploaded file</p>
+                  <div className="flex items-center justify-between gap-2 rounded-none border border-border px-4 py-2">
+                    <div className="flex min-w-0 items-center gap-3 overflow-hidden">
+                      <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={2} className="size-4 shrink-0 text-muted-foreground" />
+                      <p className="truncate text-[13px] font-medium">{selectedFile.name}</p>
+                    </div>
+                    <Button
+                      aria-label="Remove file"
+                      className="-me-2 size-8 text-muted-foreground/80 hover:bg-transparent hover:text-foreground"
+                      onClick={() => {
+                        setSelectedFile(null)
+                        setFileUploaderKey((x) => x + 1)
+                      }}
+                      size="icon"
+                      variant="ghost"
+                      disabled={isLoading}
+                    >
+                      <HugeiconsIcon icon={Add01Icon} strokeWidth={2} className="size-4 rotate-45" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {duplicateInfo?.isDuplicate && (
+                <div className="space-y-2">
+                  <Alert className="border-primary/20 bg-primary/10 text-foreground">
                     <HugeiconsIcon
-                      icon={Loading01Icon}
+                      icon={InformationCircleIcon}
                       strokeWidth={2}
-                      className="mx-auto h-8 w-8 text-muted-foreground animate-spin"
+                      className="text-primary"
                     />
-                    <p className="text-sm text-muted-foreground">Processing file...</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <HugeiconsIcon icon={CloudUploadIcon} strokeWidth={2} className="mx-auto h-8 w-8 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">
-                      Drop a file here or click to upload
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                        Supported: {supportedFormats.join(', ')}
-                    </p>
-                  </div>
+                    <AlertTitle>Duplicate song found</AlertTitle>
+                    <AlertDescription>
+                      {duplicateInfo.matchType === 'title_and_lyrics'
+                        ? 'A song with the same title and lyrics already exists in this group.'
+                        : 'A song with the same title already exists in this group.'}
+                      {duplicateInfo.existingSong?.title ? (
+                        <>
+                          {' '}
+                          Existing: <span className="font-medium">{duplicateInfo.existingSong.title}</span>
+                        </>
+                      ) : null}
+                    </AlertDescription>
+                  </Alert>
+
+                  <ButtonGroup className="w-full">
+                    <Button
+                      variant="outline"
+                      className="flex-1 justify-center"
+                      disabled={isLoading}
+                      onClick={() => {
+                        setDuplicateDecision(null)
+                        setDuplicateInfo(null)
+                        setDetailsOpen(false)
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant={duplicateDecision === 'duplicate' ? 'default' : 'outline'}
+                      className="flex-1 justify-center"
+                      disabled={isLoading}
+                      onClick={() => setDuplicateDecision('duplicate')}
+                    >
+                      <HugeiconsIcon icon={Copy01Icon} strokeWidth={2} className="mr-1.5 h-4 w-4" />
+                      Create duplicate
+                    </Button>
+                    <Button
+                      variant={duplicateDecision === 'override' ? 'default' : 'outline'}
+                      className="flex-1 justify-center"
+                      disabled={isLoading || !duplicateInfo.existingSong?.id}
+                      onClick={() => setDuplicateDecision('override')}
+                    >
+                      <HugeiconsIcon icon={ArrowDataTransferHorizontalIcon} strokeWidth={2} className="mr-1.5 h-4 w-4" />
+                      Replace
+                    </Button>
+                  </ButtonGroup>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="song_title">Song Title</Label>
+                <Input
+                  id="song_title"
+                  value={title}
+                  onChange={(e) => {
+                    setTitle(e.target.value)
+                    setDuplicateInfo(null)
+                    setDuplicateDecision(null)
+                  }}
+                  placeholder="e.g., Amazing Grace"
+                  autoFocus
+                />
+                {extractedTitle && extractedTitle !== title.trim() && (
+                  <p className="text-xs text-muted-foreground">
+                    Detected title: <span className="font-medium">{extractedTitle}</span>
+                  </p>
                 )}
               </div>
-            </div>
 
-            {error && (
-                <p className="text-sm text-destructive text-center">{error}</p>
-            )}
-
-            <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
+              <div className="space-y-3">
+                <p className="text-sm font-medium">Song info (optional)</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="default_key">Key</Label>
+                    <Input
+                      id="default_key"
+                      placeholder="e.g., E"
+                      value={defaultKey}
+                      onChange={(e) => setDefaultKey(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="ccli_id">CCLI ID</Label>
+                    <Input id="ccli_id" placeholder="e.g., 1234567" value={ccliId} onChange={(e) => setCcliId(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="artist">Artist / Author</Label>
+                    <Input id="artist" placeholder="e.g., Chris Tomlin" value={artist} onChange={(e) => setArtist(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="link_url">Video / Link</Label>
+                    <Input id="link_url" placeholder="e.g., https://youtube.com/..." value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} />
+                  </div>
                 </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">Or</span>
-                </div>
+              </div>
+
+              <div className="flex-1 min-h-0 flex flex-col space-y-2">
+                <Label htmlFor="lyrics">Lyrics / Slide Text</Label>
+                <Textarea
+                  id="lyrics"
+                  value={lyrics}
+                  onChange={(e) => {
+                    setLyrics(e.target.value)
+                    setDuplicateInfo(null)
+                    setDuplicateDecision(null)
+                  }}
+                  placeholder="Enter song lyrics or slide text here..."
+                  className="flex-1 min-h-0 h-full overflow-y-auto resize-none"
+                />
+                <p className="text-xs text-muted-foreground">This text will be used to generate slides.</p>
+              </div>
+
+              {error && <p className="text-sm text-destructive">{error}</p>}
             </div>
-
-            <Button 
-                variant="outline" 
-                className="w-full" 
-                onClick={() => setMode('manual')}
-                disabled={isLoading}
-            >
-                Enter Song Manually
-            </Button>
-
-            <DialogFooter>
-              <DialogClose nativeButton render={<Button variant="outline" />}>Cancel</DialogClose>
-            </DialogFooter>
-          </div>
-        ) : (
-          <form onSubmit={handleManualSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="title">Song Title</Label>
-              <Input
-                id="title"
-                name="title"
-                placeholder="e.g., Amazing Grace"
-                required
-                autoFocus
-              />
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="lyrics">Lyrics / Slide Text</Label>
-              <Textarea
-                id="lyrics"
-                name="lyrics"
-                placeholder="Enter song lyrics or slide text here..."
-                className="min-h-[150px]"
-              />
-              <p className="text-xs text-muted-foreground">
-                This text will be used to generate slides.
-              </p>
-            </div>
-
-            {error && (
-              <p className="text-sm text-destructive">{error}</p>
-            )}
 
             <DialogFooter className="pt-2 sm:justify-between sm:flex-row-reverse">
               <div className="flex gap-2">
-                <DialogClose nativeButton render={<Button variant="outline" />}>Cancel</DialogClose>
-                <Button type="submit" disabled={isLoading}>
+                <Button
+                  disabled={isLoading || (duplicateInfo?.isDuplicate && !duplicateDecision)}
+                  onClick={handleCreate}
+                >
                   {isLoading ? (
                     <>
                       <HugeiconsIcon icon={Loading01Icon} strokeWidth={2} className="mr-1.5 h-4 w-4 animate-spin" />
-                      Checking...
+                      Creating…
                     </>
                   ) : (
-                    'Add Song'
+                    'Create song'
                   )}
                 </Button>
+                <DialogClose nativeButton render={<Button variant="outline" />}>
+                  Back
+                </DialogClose>
               </div>
-              <Button 
-                type="button" 
-                variant="ghost" 
-                size="sm"
-                onClick={() => {
-                  setMode('upload')
-                  setError(null)
-                }}
-                className="text-muted-foreground justify-self-start"
-              >
-                <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={2} className="mr-1.5 h-4 w-4" />
-                Back to Upload
-              </Button>
             </DialogFooter>
-          </form>
-        )}
+          </DialogContent>
+        </Dialog>
+
+        <DialogFooter className="pt-2">
+          <DialogClose nativeButton render={<Button variant="outline" />}>Close</DialogClose>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

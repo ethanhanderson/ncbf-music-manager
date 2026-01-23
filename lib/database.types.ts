@@ -173,17 +173,51 @@ export type Database = {
           },
         ]
       }
+      song_arrangement_groups: {
+        Row: {
+          arrangement_id: string
+          id: string
+          position: number
+          slide_group_id: string
+        }
+        Insert: {
+          arrangement_id: string
+          id?: string
+          position?: number
+          slide_group_id: string
+        }
+        Update: {
+          arrangement_id?: string
+          id?: string
+          position?: number
+          slide_group_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "song_arrangement_groups_arrangement_id_fkey"
+            columns: ["arrangement_id"]
+            isOneToOne: false
+            referencedRelation: "song_arrangements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "song_arrangement_groups_slide_group_id_fkey"
+            columns: ["slide_group_id"]
+            isOneToOne: false
+            referencedRelation: "song_slide_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       song_arrangements: {
         Row: {
           chords_text: string | null
           created_at: string
           group_id: string | null
-          group_arrangement: Json | null
           id: string
-          master_group_arrangement: Json | null
+          is_locked: boolean
           name: string
           notes: string | null
-          slides: Json | null
           song_id: string
           updated_at: string
         }
@@ -191,12 +225,10 @@ export type Database = {
           chords_text?: string | null
           created_at?: string
           group_id?: string | null
-          group_arrangement?: Json | null
           id?: string
-          master_group_arrangement?: Json | null
+          is_locked?: boolean
           name: string
           notes?: string | null
-          slides?: Json | null
           song_id: string
           updated_at?: string
         }
@@ -204,12 +236,10 @@ export type Database = {
           chords_text?: string | null
           created_at?: string
           group_id?: string | null
-          group_arrangement?: Json | null
           id?: string
-          master_group_arrangement?: Json | null
+          is_locked?: boolean
           name?: string
           notes?: string | null
-          slides?: Json | null
           song_id?: string
           updated_at?: string
         }
@@ -297,23 +327,138 @@ export type Database = {
           },
         ]
       }
-      songs: {
+      song_slide_groups: {
+        Row: {
+          created_at: string
+          custom_label: string | null
+          group_id: string
+          id: string
+          label: string
+          position: number
+          song_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          custom_label?: string | null
+          group_id: string
+          id?: string
+          label: string
+          position?: number
+          song_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          custom_label?: string | null
+          group_id?: string
+          id?: string
+          label?: string
+          position?: number
+          song_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "song_slide_groups_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "music_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "song_slide_groups_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      song_slides: {
         Row: {
           created_at: string
           group_id: string
           id: string
-          title: string
+          lines: string[]
+          position: number
+          slide_group_id: string
+          song_id: string
+          updated_at: string
         }
         Insert: {
           created_at?: string
           group_id: string
           id?: string
-          title: string
+          lines?: string[]
+          position?: number
+          slide_group_id: string
+          song_id: string
+          updated_at?: string
         }
         Update: {
           created_at?: string
           group_id?: string
           id?: string
+          lines?: string[]
+          position?: number
+          slide_group_id?: string
+          song_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "song_slides_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "music_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "song_slides_slide_group_id_fkey"
+            columns: ["slide_group_id"]
+            isOneToOne: false
+            referencedRelation: "song_slide_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "song_slides_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      songs: {
+        Row: {
+          artist: string | null
+          ccli_id: string | null
+          created_at: string
+          default_key: string | null
+          group_id: string
+          id: string
+          link_url: string | null
+          title: string
+        }
+        Insert: {
+          artist?: string | null
+          ccli_id?: string | null
+          created_at?: string
+          default_key?: string | null
+          group_id: string
+          id?: string
+          link_url?: string | null
+          title: string
+        }
+        Update: {
+          artist?: string | null
+          ccli_id?: string | null
+          created_at?: string
+          default_key?: string | null
+          group_id?: string
+          id?: string
+          link_url?: string | null
           title?: string
         }
         Relationships: [
@@ -322,6 +467,63 @@ export type Database = {
             columns: ["group_id"]
             isOneToOne: false
             referencedRelation: "music_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      song_revisions: {
+        Row: {
+          artist: string | null
+          ccli_id: string | null
+          created_at: string
+          default_key: string | null
+          group_id: string
+          id: string
+          link_url: string | null
+          slide_groups: Json
+          slides: Json
+          song_id: string
+          title: string
+        }
+        Insert: {
+          artist?: string | null
+          ccli_id?: string | null
+          created_at?: string
+          default_key?: string | null
+          group_id: string
+          id?: string
+          link_url?: string | null
+          slide_groups?: Json
+          slides?: Json
+          song_id: string
+          title: string
+        }
+        Update: {
+          artist?: string | null
+          ccli_id?: string | null
+          created_at?: string
+          default_key?: string | null
+          group_id?: string
+          id?: string
+          link_url?: string | null
+          slide_groups?: Json
+          slides?: Json
+          song_id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "song_revisions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "music_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "song_revisions_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
             referencedColumns: ["id"]
           },
         ]

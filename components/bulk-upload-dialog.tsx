@@ -20,6 +20,16 @@ import {
   ArrowDataTransferHorizontalIcon,
 } from '@hugeicons/core-free-icons'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
   Dialog,
   DialogClose,
   DialogContent,
@@ -84,6 +94,7 @@ export function BulkUploadDialog({
   triggerNativeButton = true,
 }: BulkUploadDialogProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [queue, setQueue] = useState<QueuedFile[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
   const [dragOver, setDragOver] = useState(false)
@@ -281,6 +292,15 @@ export function BulkUploadDialog({
     resetState()
   }
 
+  function confirmCancelProcessing() {
+    if (isProcessing) {
+      abortControllerRef.current?.abort()
+    }
+    resetState()
+    setShowCancelConfirm(false)
+    setIsOpen(false)
+  }
+
   const uploadFile = useCallback(
     async (queuedFile: QueuedFile): Promise<void> => {
       if (!activeGroup) return
@@ -426,14 +446,13 @@ export function BulkUploadDialog({
     (pendingCount > 0 || (duplicateCount > 0 && unresolvedDuplicates.length === 0))
 
   return (
-    <Dialog
+    <>
+      <Dialog
       open={isOpen}
       onOpenChange={(open) => {
         if (!open && isProcessing) {
-          if (!confirm('Processing in progress. Are you sure you want to cancel?')) {
-            return
-          }
-          abortControllerRef.current?.abort()
+          setShowCancelConfirm(true)
+          return
         }
         if (!open) {
           resetState()
@@ -640,7 +659,7 @@ export function BulkUploadDialog({
                         {/* Status icon */}
                         <div className="shrink-0 mt-0.5">
                           {queuedFile.status === 'pending' && (
-                            <div className="size-4 rounded-full border-2 border-muted-foreground/30" />
+                            <div className="size-4 rounded-none border-2 border-muted-foreground/30" />
                           )}
                           {(queuedFile.status === 'checking' || queuedFile.status === 'uploading') && (
                             <HugeiconsIcon
@@ -833,5 +852,22 @@ export function BulkUploadDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+      <AlertDialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel bulk upload?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Uploads are still processing. Cancelling will stop the remaining files in the queue.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel size="sm">Keep uploading</AlertDialogCancel>
+            <AlertDialogAction size="sm" variant="destructive" onClick={confirmCancelProcessing}>
+              Cancel uploads
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
