@@ -9,7 +9,9 @@ export type SetCatalogRow = Set & {
   songCount: number
 }
 
-export const getGroupSets = cache(async (groupId: string): Promise<Array<Set & { songCount: number }>> => {
+export const getGroupSets = cache(async (
+  groupId: string
+): Promise<Array<Set & { songCount: number; arrangementCount: number }>> => {
   const supabase = createServerSupabaseClient()
   const { data: sets, error } = await supabase
     .from('sets')
@@ -29,7 +31,7 @@ export const getGroupSets = cache(async (groupId: string): Promise<Array<Set & {
   const setIds = sets.map(s => s.id)
   const { data: setSongs, error: setSongsError } = await supabase
     .from('set_songs')
-    .select('set_id')
+    .select('set_id, arrangement_id')
     .in('set_id', setIds)
 
   if (setSongsError) {
@@ -37,13 +39,18 @@ export const getGroupSets = cache(async (groupId: string): Promise<Array<Set & {
   }
 
   const songCounts = new Map<string, number>()
+  const arrangementCounts = new Map<string, number>()
   setSongs?.forEach(row => {
       songCounts.set(row.set_id, (songCounts.get(row.set_id) ?? 0) + 1)
+      if (row.arrangement_id) {
+        arrangementCounts.set(row.set_id, (arrangementCounts.get(row.set_id) ?? 0) + 1)
+      }
   })
   
   return sets.map(set => ({
       ...set,
-      songCount: songCounts.get(set.id) ?? 0
+      songCount: songCounts.get(set.id) ?? 0,
+      arrangementCount: arrangementCounts.get(set.id) ?? 0,
   }))
 })
 
@@ -251,12 +258,20 @@ export async function createSet(
 
     if (!songFetchError && validSongs?.length) {
       const validSongIds = new Set(validSongs.map((song) => song.id))
+      const missingArrangementSongIds = setSongs
+        .filter((song) => !song.arrangementId && validSongIds.has(song.songId))
+        .map((song) => song.songId)
+      const defaultArrangementMap =
+        missingArrangementSongIds.length > 0
+          ? await getDefaultArrangementIds(supabase, missingArrangementSongIds)
+          : new Map<string, string>()
       const rows = setSongs
         .filter((song) => validSongIds.has(song.songId))
         .map((song, index) => ({
           set_id: data.id,
           song_id: song.songId,
-          arrangement_id: song.arrangementId || null,
+          arrangement_id:
+            song.arrangementId || defaultArrangementMap.get(song.songId) || null,
           notes: song.notes?.trim() || null,
           position: song.position ?? index + 1,
         }))
@@ -371,12 +386,17 @@ export async function addSongToSet(
   
   const nextPosition = existing && existing.length > 0 ? existing[0].position + 1 : 1
   
+  const resolvedArrangementId =
+    arrangementId ||
+    (await getDefaultArrangementIds(supabase, [songId])).get(songId) ||
+    null
+
   const { error } = await supabase
     .from('set_songs')
     .insert({
       set_id: setId,
       song_id: songId,
-      arrangement_id: arrangementId || null,
+      arrangement_id: resolvedArrangementId,
       position: nextPosition,
     })
   
@@ -386,6 +406,51 @@ export async function addSongToSet(
   
   revalidatePath(`/groups/${groupSlug}/sets/${setId}`)
   return { success: true }
+}
+
+async function getDefaultArrangementIds(
+  supabase: ReturnType<typeof createServerSupabaseClient>,
+  songIds: string[]
+): Promise<Map<string, string>> {
+  if (songIds.length === 0) return new Map()
+
+  const { data: arrangements, error } = await supabase
+    .from('song_arrangements')
+    .select('id, song_id, is_locked, name')
+    .in('song_id', songIds)
+    .order('created_at', { ascending: true })
+
+  if (error || !arrangements) {
+    console.error('Error fetching default arrangements:', error)
+    return new Map()
+  }
+
+  const bestBySong = new Map<
+    string,
+    { id: string; is_locked: boolean; name: string }
+  >()
+
+  arrangements.forEach((arrangement) => {
+    const existing = bestBySong.get(arrangement.song_id)
+    const score = arrangement.is_locked ? 2 : arrangement.name === 'Default' ? 1 : 0
+    const existingScore = existing
+      ? existing.is_locked
+        ? 2
+        : existing.name === 'Default'
+          ? 1
+          : 0
+      : -1
+    if (!existing || score > existingScore) {
+      bestBySong.set(arrangement.song_id, arrangement)
+    }
+  })
+
+  const resolved = new Map<string, string>()
+  bestBySong.forEach((value, key) => {
+    resolved.set(key, value.id)
+  })
+
+  return resolved
 }
 
 export async function removeSongFromSet(

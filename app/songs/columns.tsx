@@ -4,7 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { type ColumnDef } from "@tanstack/react-table"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowUpDownIcon, MoreHorizontalIcon, Edit01Icon, Delete02Icon, MusicNote03Icon, Download01Icon } from "@hugeicons/core-free-icons"
+import { ArrowDown04Icon, ArrowUp04Icon, ArrowUpDownIcon, MoreHorizontalIcon, Edit01Icon, Delete02Icon, MusicNote03Icon, Download01Icon } from "@hugeicons/core-free-icons"
 
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -75,6 +75,9 @@ export const columns: ColumnDef<SongRow>[] = [
   {
     accessorKey: "title",
     header: ({ column }) => {
+      const sort = column.getIsSorted()
+      const icon = sort === "asc" ? ArrowUp04Icon : sort === "desc" ? ArrowDown04Icon : ArrowUpDownIcon
+
       return (
         <Button
           variant="ghost"
@@ -83,7 +86,7 @@ export const columns: ColumnDef<SongRow>[] = [
         >
           Song
           <HugeiconsIcon
-            icon={ArrowUpDownIcon}
+            icon={icon}
             strokeWidth={2}
             className="ml-2 h-4 w-4"
           />
@@ -116,6 +119,9 @@ export const columns: ColumnDef<SongRow>[] = [
   {
     accessorKey: "arrangementCount",
     header: ({ column }) => {
+      const sort = column.getIsSorted()
+      const icon = sort === "asc" ? ArrowUp04Icon : sort === "desc" ? ArrowDown04Icon : ArrowUpDownIcon
+
       return (
         <Button
           variant="ghost"
@@ -124,7 +130,7 @@ export const columns: ColumnDef<SongRow>[] = [
         >
           Arrangements
           <HugeiconsIcon
-            icon={ArrowUpDownIcon}
+            icon={icon}
             strokeWidth={2}
             className="ml-2 h-4 w-4"
           />
@@ -140,6 +146,9 @@ export const columns: ColumnDef<SongRow>[] = [
   {
     accessorKey: "lastUsedDate",
     header: ({ column }) => {
+      const sort = column.getIsSorted()
+      const icon = sort === "asc" ? ArrowUp04Icon : sort === "desc" ? ArrowDown04Icon : ArrowUpDownIcon
+
       return (
         <Button
           variant="ghost"
@@ -148,7 +157,7 @@ export const columns: ColumnDef<SongRow>[] = [
         >
           Last used
           <HugeiconsIcon
-            icon={ArrowUpDownIcon}
+            icon={icon}
             strokeWidth={2}
             className="ml-2 h-4 w-4"
           />
@@ -184,6 +193,9 @@ export const columns: ColumnDef<SongRow>[] = [
   {
     accessorKey: "createdAt",
     header: ({ column }) => {
+      const sort = column.getIsSorted()
+      const icon = sort === "asc" ? ArrowUp04Icon : sort === "desc" ? ArrowDown04Icon : ArrowUpDownIcon
+
       return (
         <Button
           variant="ghost"
@@ -192,7 +204,7 @@ export const columns: ColumnDef<SongRow>[] = [
         >
           Added
           <HugeiconsIcon
-            icon={ArrowUpDownIcon}
+            icon={icon}
             strokeWidth={2}
             className="ml-2 h-4 w-4"
           />
@@ -251,6 +263,7 @@ function SongActionsCell({ song }: { song: SongRow }) {
     <>
       <SongChartsExportDialog
         songIds={[song.id]}
+        songs={[{ id: song.id, title: song.title }]}
         label={`${song.title} charts`}
         open={exportDialogOpen}
         onOpenChange={setExportDialogOpen}
@@ -347,4 +360,3 @@ function SongActionsCell({ song }: { song: SongRow }) {
     </>
   )
 }
-

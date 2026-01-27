@@ -2,10 +2,10 @@
 
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Download01Icon } from '@hugeicons/core-free-icons'
+import { Download01Icon, MusicNote03Icon } from '@hugeicons/core-free-icons'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { FormatToggleCard } from '@/components/format-toggle-card'
 
 type ChartFormat = 'pdf' | 'docx' | 'txt'
@@ -56,7 +56,9 @@ function getFilenameFromDisposition(value: string | null) {
 
 interface SongChartsExportDialogProps {
   songIds: string[]
+  songs?: Array<{ id: string; title: string }>
   label?: string
+  title?: string
   triggerLabel?: string
   triggerClassName?: string
   trigger?: ReactNode
@@ -67,7 +69,9 @@ interface SongChartsExportDialogProps {
 
 export function SongChartsExportDialog({
   songIds,
+  songs,
   label = 'Songs export',
+  title = 'Export charts',
   triggerLabel = 'Export songs',
   triggerClassName,
   trigger,
@@ -91,7 +95,17 @@ export function SongChartsExportDialog({
     return (Object.keys(formats) as ChartFormat[]).filter((key) => formats[key])
   }, [formats])
 
-  const selectedCount = songIds.length
+  const resolvedSongs = useMemo(() => {
+    if (songs && songs.length > 0) return songs
+    return songIds.map((id) => ({ id, title: 'Untitled song' }))
+  }, [songIds, songs])
+
+  const resolvedSongIds = useMemo(() => {
+    if (songs && songs.length > 0) return songs.map((song) => song.id)
+    return songIds
+  }, [songIds, songs])
+
+  const selectedCount = resolvedSongIds.length
   const isSingleSong = selectedCount === 1
   const isSingleFormat = selectedFormats.length === 1
   const isSingleType = includeVocal !== includeChord
@@ -104,7 +118,7 @@ export function SongChartsExportDialog({
   }, [isSingleFormat, isSingleSong, isSingleType, selectedFormats])
 
   const handleDownload = useCallback(async () => {
-    if (songIds.length === 0 || selectedFormats.length === 0 || (!includeVocal && !includeChord)) return
+    if (resolvedSongIds.length === 0 || selectedFormats.length === 0 || (!includeVocal && !includeChord)) return
     setIsDownloading(true)
     setError(null)
     try {
@@ -112,7 +126,7 @@ export function SongChartsExportDialog({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          songIds,
+          songIds: resolvedSongIds,
           formats: selectedFormats,
           include: { vocal: includeVocal, chord: includeChord },
         }),
@@ -136,9 +150,9 @@ export function SongChartsExportDialog({
     } finally {
       setIsDownloading(false)
     }
-  }, [includeChord, includeVocal, label, selectedFormats, songIds])
+  }, [includeChord, includeVocal, label, resolvedSongIds, selectedFormats])
 
-  const hasSongs = songIds.length > 0
+  const hasSongs = resolvedSongIds.length > 0
 
   const isDialogOpen = open ?? isOpen
   const triggerNode = trigger ? (
@@ -176,16 +190,23 @@ export function SongChartsExportDialog({
         }}
       >
         <DialogHeader>
-          <DialogTitle>{label}</DialogTitle>
-          <DialogDescription>
-            Download chart exports for the selected songs and formats.
-          </DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>{selectedCount} selected</span>
-          </div>
+          {resolvedSongs.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {resolvedSongs.map((song) => (
+                <div
+                  key={song.id}
+                  className="inline-flex items-center gap-2 rounded-none border border-border bg-muted/40 px-3 py-1 text-xs text-foreground"
+                >
+                  <HugeiconsIcon icon={MusicNote03Icon} strokeWidth={2} className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="max-w-[220px] truncate">{song.title || 'Untitled song'}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           {!hasSongs && (
             <p className="text-xs text-muted-foreground">
@@ -233,9 +254,11 @@ export function SongChartsExportDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" type="button" onClick={() => setIsOpen(false)} disabled={isDownloading}>
+          <DialogClose
+            render={<Button variant="outline" type="button" disabled={isDownloading} />}
+          >
             Cancel
-          </Button>
+          </DialogClose>
           <Button
             type="button"
             onClick={handleDownload}

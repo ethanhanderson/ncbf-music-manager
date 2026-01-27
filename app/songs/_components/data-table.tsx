@@ -17,7 +17,7 @@ import {
 } from "@tanstack/react-table"
 
 import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowUpDownIcon, MusicNote03Icon, Download01Icon, Layers01Icon } from "@hugeicons/core-free-icons"
+import { ArrowLeftIcon, ArrowRightIcon, ArrowUpDownIcon, MusicNote03Icon, Download01Icon, Layers01Icon } from "@hugeicons/core-free-icons"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -33,6 +33,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -98,6 +99,10 @@ function getInitialSongsTablePageSize(): number {
   return 10
 }
 
+function formatCount(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`
+}
+
 export function DataTable<TData, TValue>({
   columns,
   data,
@@ -115,6 +120,7 @@ export function DataTable<TData, TValue>({
   }))
   const [rowSelection, setRowSelection] = React.useState({})
   const [globalFilter, setGlobalFilter] = React.useState(initialSearch)
+  const [exportDialogOpen, setExportDialogOpen] = React.useState(false)
   const [pagination, setPagination] = React.useState<PaginationState>(() => ({
     pageIndex: 0,
     pageSize: getInitialSongsTablePageSize(),
@@ -181,20 +187,32 @@ export function DataTable<TData, TValue>({
     additionalColumnFilters
 
   // Get selected song IDs
-  const getSelectedSongIds = (): string[] => {
+  const getSelectedSongs = (): Array<{ id: string; title: string }> => {
     return table.getFilteredSelectedRowModel().rows
-      .map(row => {
+      .map((row) => {
         const original = row.original as Record<string, unknown>
-        return original.id as string
+        return {
+          id: String(original.id ?? ""),
+          title: String(original.title ?? "Untitled song"),
+        }
       })
-      .filter(Boolean)
+      .filter((song) => Boolean(song.id))
   }
 
   const selectedRowCount = table.getFilteredSelectedRowModel().rows.length
-  const selectedSongIds = getSelectedSongIds()
+  const selectedSongs = getSelectedSongs()
+  const selectedSongIds = selectedSongs.map((song) => song.id)
 
   return (
     <div className="w-full space-y-4">
+      <SongChartsExportDialog
+        songIds={selectedSongIds}
+        songs={selectedSongs}
+        label="Selected song charts"
+        open={exportDialogOpen}
+        onOpenChange={setExportDialogOpen}
+        hideTrigger={true}
+      />
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex w-full items-center gap-2 sm:max-w-[520px]">
           <Input
@@ -211,7 +229,7 @@ export function DataTable<TData, TValue>({
               render={
                 <Button variant="outline" className="h-10 px-3" disabled={selectedRowCount === 0}>
                   <HugeiconsIcon icon={Download01Icon} strokeWidth={2} className="mr-2 h-4 w-4" />
-                  Export
+                  Bulk actions
                   {selectedRowCount > 0 && (
                     <span className="ml-2 rounded-none bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
                       {selectedRowCount}
@@ -221,20 +239,17 @@ export function DataTable<TData, TValue>({
               }
             />
             <DropdownMenuContent align="end" className="min-w-[220px]">
-              <DropdownMenuLabel>
-                {selectedRowCount} song(s) selected
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <SongChartsExportDialog
-                songIds={selectedSongIds}
-                label="Selected song charts"
-                trigger={
-                  <DropdownMenuItem disabled={selectedRowCount === 0}>
-                    <HugeiconsIcon icon={MusicNote03Icon} strokeWidth={2} className="mr-2 h-4 w-4" />
-                    Export charts
-                  </DropdownMenuItem>
-                }
-              />
+              <DropdownMenuGroup>
+                <DropdownMenuItem
+                  disabled={selectedRowCount === 0}
+                  onClick={() => {
+                    setExportDialogOpen(true)
+                  }}
+                >
+                  <HugeiconsIcon icon={MusicNote03Icon} strokeWidth={2} className="mr-2 h-4 w-4" />
+                  Export charts
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -431,8 +446,13 @@ export function DataTable<TData, TValue>({
         <div className="flex items-center gap-3 flex-1">
           <span className="text-muted-foreground text-sm">
             {selectedRowCount} of{" "}
-            {table.getFilteredRowModel().rows.length} row(s) selected.
+            {formatCount(table.getFilteredRowModel().rows.length, "row")} selected.
           </span>
+          {selectedRowCount > 0 && (
+            <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => table.resetRowSelection()}>
+              Clear selection
+            </Button>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
@@ -462,18 +482,22 @@ export function DataTable<TData, TValue>({
             <Button
               variant="outline"
               size="sm"
+              className="h-9 gap-2 px-3"
               onClick={() => table.previousPage()}
               disabled={!table.getCanPreviousPage()}
             >
-              Previous
+              <HugeiconsIcon icon={ArrowLeftIcon} strokeWidth={2} className="size-4" />
+              <span>Previous</span>
             </Button>
             <Button
               variant="outline"
               size="sm"
+              className="h-9 gap-2 px-3"
               onClick={() => table.nextPage()}
               disabled={!table.getCanNextPage()}
             >
-              Next
+              <span>Next</span>
+              <HugeiconsIcon icon={ArrowRightIcon} strokeWidth={2} className="size-4" />
             </Button>
           </div>
         </div>
@@ -481,4 +505,3 @@ export function DataTable<TData, TValue>({
     </div>
   )
 }
-

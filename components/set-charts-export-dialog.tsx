@@ -1,11 +1,11 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Download01Icon } from '@hugeicons/core-free-icons'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { FormatToggleCard } from '@/components/format-toggle-card'
 
 interface SetChartsExportDialogProps {
@@ -17,6 +17,8 @@ interface SetChartsExportDialogProps {
     arrangementId: string | null
     position: number
   }>
+  autoFetch?: boolean
+  prefetchError?: string | null
   triggerLabel?: string
   triggerClassName?: string
   trigger?: ReactNode
@@ -49,6 +51,8 @@ const FORMAT_DETAILS: Record<ChartFormat, { description: string }> = {
   docx: { description: 'Editable document that mirrors the chart layout.' },
   txt: { description: 'Raw text in the same chart layout, without styling.' },
 }
+
+const EMPTY_SONGS: SetChartsExportDialogProps['songs'] = []
 
 function sanitizeFilename(value: string) {
   return value.replace(/[^a-zA-Z0-9\s-]/g, '').trim()
@@ -86,7 +90,9 @@ function buildDefaultSelections(songs: Array<{ songId: string }>) {
 export function SetChartsExportDialog({
   setId,
   setTitle,
-  songs = [],
+  songs = EMPTY_SONGS,
+  autoFetch = true,
+  prefetchError = null,
   triggerLabel = 'Export set',
   triggerClassName,
   trigger,
@@ -96,27 +102,41 @@ export function SetChartsExportDialog({
 }: SetChartsExportDialogProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(prefetchError)
   const [formats, setFormats] = useState(DEFAULT_FORMATS)
   const [selections, setSelections] = useState<Record<string, ChartSelection>>(() => buildDefaultSelections(songs))
   const [loadedSongs, setLoadedSongs] = useState(songs)
   const [isLoadingSongs, setIsLoadingSongs] = useState(false)
+  const latestSongsRef = useRef(songs)
 
+  useEffect(() => {
+    latestSongsRef.current = songs
+  }, [songs])
+
+  const isDialogOpen = open ?? isOpen
   const activeSongs = loadedSongs.length > 0 ? loadedSongs : songs
 
   useEffect(() => {
-    if (!isOpen) {
+    if (!isDialogOpen) {
+      const nextSongs = latestSongsRef.current ?? []
       setFormats(DEFAULT_FORMATS)
-      setSelections(buildDefaultSelections(activeSongs))
+      setSelections(buildDefaultSelections(nextSongs))
       setError(null)
       setIsDownloading(false)
       setIsLoadingSongs(false)
-      setLoadedSongs(songs)
+      setLoadedSongs(nextSongs)
+      setError(null)
     }
-  }, [isOpen, activeSongs, songs])
+  }, [isDialogOpen])
 
   useEffect(() => {
-    if (!isOpen) return
+    if (!isDialogOpen) return
+    setError(prefetchError)
+  }, [isDialogOpen, prefetchError])
+
+  useEffect(() => {
+    if (!isDialogOpen) return
+    if (!autoFetch) return
     if (songs.length > 0 || loadedSongs.length > 0) return
     let isActive = true
     setIsLoadingSongs(true)
@@ -146,7 +166,7 @@ export function SetChartsExportDialog({
     return () => {
       isActive = false
     }
-  }, [isOpen, loadedSongs.length, setId, songs.length])
+  }, [autoFetch, isDialogOpen, loadedSongs.length, setId, songs.length])
 
   const hasSongs = activeSongs.length > 0
 
@@ -163,7 +183,7 @@ export function SetChartsExportDialog({
   const handleOpenChange = useCallback((nextOpen: boolean) => {
     onOpenChange?.(nextOpen)
     setIsOpen(nextOpen)
-  }, [activeSongs.length, onOpenChange, open, trigger])
+  }, [onOpenChange])
 
   const selectedCount = selectedItems.length
   const selectedFormats = useMemo(() => {
@@ -222,16 +242,14 @@ export function SetChartsExportDialog({
       const fallbackName = safeTitle ? `${safeTitle} - Charts.zip` : 'Charts Export.zip'
       const filename = headerFilename || fallbackName
       downloadBlob(blob, filename)
-      setIsOpen(false)
+      handleOpenChange(false)
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Unexpected error while exporting charts.'
       setError(message)
     } finally {
       setIsDownloading(false)
     }
-  }, [hasSongs, selectedFormats, selectedItems, setId, setTitle])
-
-  const isDialogOpen = open ?? isOpen
+  }, [handleOpenChange, hasSongs, selectedFormats, selectedItems, setId, setTitle])
   const triggerNode = trigger ? (
     <div className="contents">{trigger}</div>
   ) : (
@@ -346,9 +364,12 @@ export function SetChartsExportDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" type="button" onClick={() => setIsOpen(false)} disabled={isDownloading}>
+          <DialogClose
+            render={<Button variant="outline" type="button" disabled={isDownloading} />}
+            disabled={isDownloading}
+          >
             Cancel
-          </Button>
+          </DialogClose>
           <Button
             type="button"
             onClick={handleDownload}

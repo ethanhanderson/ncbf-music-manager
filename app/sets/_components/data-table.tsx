@@ -17,7 +17,7 @@ import {
 } from "@tanstack/react-table"
 
 import { HugeiconsIcon } from "@hugeicons/react"
-import { CalendarAdd01Icon, Layers01Icon, MusicNote03Icon } from "@hugeicons/core-free-icons"
+import { ArrowLeftIcon, ArrowRightIcon, CalendarAdd01Icon, Layers01Icon, MusicNote03Icon } from "@hugeicons/core-free-icons"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -90,6 +90,10 @@ function getInitialSetsTablePageSize(): number {
   }
 
   return 10
+}
+
+function formatCount(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`
 }
 
 export function DataTable<TData, TValue>({
@@ -377,7 +381,7 @@ export function DataTable<TData, TValue>({
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-sm text-muted-foreground">
-          {table.getFilteredRowModel().rows.length} set(s)
+          {formatCount(table.getFilteredRowModel().rows.length, "set")}
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
@@ -407,18 +411,22 @@ export function DataTable<TData, TValue>({
             <Button
               variant="outline"
               size="sm"
+              className="h-9 gap-2 px-3"
               onClick={() => table.previousPage()}
               disabled={!table.getCanPreviousPage()}
             >
-              Previous
+              <HugeiconsIcon icon={ArrowLeftIcon} strokeWidth={2} className="size-4" />
+              <span>Previous</span>
             </Button>
             <Button
               variant="outline"
               size="sm"
+              className="h-9 gap-2 px-3"
               onClick={() => table.nextPage()}
               disabled={!table.getCanNextPage()}
             >
-              Next
+              <span>Next</span>
+              <HugeiconsIcon icon={ArrowRightIcon} strokeWidth={2} className="size-4" />
             </Button>
           </div>
         </div>

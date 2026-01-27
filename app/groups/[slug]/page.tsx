@@ -176,12 +176,17 @@ export default async function GroupPage({ params }: GroupPageProps) {
                               </div>
                             </CardHeader>
                             <CardContent className="flex-1 flex flex-col justify-end">
-                                <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-3">
+                                <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-2">
                                     <HugeiconsIcon icon={MusicNote03Icon} className="w-4 h-4" />
                                     <span>{set.songCount} {set.songCount === 1 ? 'song' : 'songs'}</span>
                                 </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {set.songCount === 0
+                                    ? 'Arrangements: none yet'
+                                    : `Arrangements: ${set.arrangementCount}/${set.songCount}`}
+                                </div>
                                 {set.notes && (
-                                    <p className="text-sm text-muted-foreground line-clamp-2 pt-3 border-t">{set.notes}</p>
+                                    <p className="text-sm text-muted-foreground line-clamp-2 pt-3 border-t mt-3">{set.notes}</p>
                                 )}
                             </CardContent>
                           </Card>
@@ -208,9 +213,14 @@ export default async function GroupPage({ params }: GroupPageProps) {
                               </CardDescription>
                             </CardHeader>
                             <CardContent className="flex-1 flex flex-col justify-end">
-                                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-2">
                                     <HugeiconsIcon icon={MusicNote03Icon} className="w-4 h-4" />
                                     <span>{set.songCount} {set.songCount === 1 ? 'song' : 'songs'}</span>
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {set.songCount === 0
+                                    ? 'Arrangements: none yet'
+                                    : `Arrangements: ${set.arrangementCount}/${set.songCount}`}
                                 </div>
                             </CardContent>
                           </Card>
@@ -231,14 +241,11 @@ export default async function GroupPage({ params }: GroupPageProps) {
                  <section>
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-lg font-semibold">Recent Songs</h2>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          nativeButton={false}
-                          render={<Link href={`/groups/${group.slug}/songs`} />}
-                        >
-                          <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} className="mr-1.5 h-4 w-4" />
-                          View All
+                        <Button asChild variant="secondary" size="sm">
+                          <Link href={`/groups/${group.slug}/songs`}>
+                            <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} className="mr-1.5 h-4 w-4" />
+                            View All
+                          </Link>
                         </Button>
                     </div>
                     <div className="space-y-3">

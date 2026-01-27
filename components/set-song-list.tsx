@@ -186,6 +186,14 @@ const SortableSongRow = memo(function SortableSongRow({
     return defaultArrangement?.id ?? arrangements[0]?.id ?? null
   }, [arrangements])
   const effectiveArrangementId = setSong.arrangement_id ?? defaultArrangementId
+  const arrangementStatusLabel = useMemo(() => {
+    if (setSong.song_arrangements?.name) return setSong.song_arrangements.name
+    if (!effectiveArrangementId) return 'No arrangement'
+    return (
+      arrangements.find((arrangement) => arrangement.id === effectiveArrangementId)?.name ??
+      'Unknown arrangement'
+    )
+  }, [arrangements, effectiveArrangementId, setSong.song_arrangements?.name])
   const arrangementLabel = useMemo(() => {
     if (isLoadingArrangements) return 'Loading...'
     if (!effectiveArrangementId) return arrangements.length > 0 ? 'Unknown arrangement' : 'No arrangements'
@@ -248,40 +256,32 @@ const SortableSongRow = memo(function SortableSongRow({
                   >
                     <TruncatedSongTitle title={setSong.songs.title} />
                   </Link>
-                  {(setSong.song_arrangements?.name ||
-                    setSong.key_override ||
-                    setSong.notes) && (
-                    <div className="mt-2">
-                      {(setSong.song_arrangements?.name || setSong.key_override) && (
-                        <div className="flex flex-wrap items-center gap-2 text-xs">
-                          {setSong.song_arrangements?.name && (
-                            <div className="inline-flex items-center gap-2 rounded-none border border-border/60 bg-muted/40 px-2.5 py-1">
-                              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                                Arrangement
-                              </span>
-                              <span className="font-medium text-foreground/80">{setSong.song_arrangements.name}</span>
-                            </div>
-                          )}
-                          {setSong.key_override && (
-                            <div className="inline-flex items-center gap-2 rounded-none border border-border/60 bg-muted/40 px-2.5 py-1">
-                              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Key</span>
-                              <span className="font-medium text-foreground/80">{setSong.key_override}</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {setSong.notes && (
-                        <div className="mt-3 text-xs text-muted-foreground">
-                          <div className="rounded-none border border-border/60 bg-muted/30 px-2.5 py-2">
-                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Set notes</p>
-                            <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-foreground/80">
-                              {setSong.notes}
-                            </p>
-                          </div>
+                  <div className="mt-2">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <div className="inline-flex items-center gap-2 rounded-none border border-border/60 bg-muted/40 px-2.5 py-1">
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                          Arrangement
+                        </span>
+                        <span className="font-medium text-foreground/80">{arrangementStatusLabel}</span>
+                      </div>
+                      {setSong.key_override && (
+                        <div className="inline-flex items-center gap-2 rounded-none border border-border/60 bg-muted/40 px-2.5 py-1">
+                          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Key</span>
+                          <span className="font-medium text-foreground/80">{setSong.key_override}</span>
                         </div>
                       )}
                     </div>
-                  )}
+                    {setSong.notes && (
+                      <div className="mt-3 text-xs text-muted-foreground">
+                        <div className="rounded-none border border-border/60 bg-muted/30 px-2.5 py-2">
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Set notes</p>
+                          <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-foreground/80">
+                            {setSong.notes}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

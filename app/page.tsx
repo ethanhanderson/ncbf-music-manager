@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { getGroupsWithCounts } from '@/lib/actions/groups'
 import { getUpcomingSetWithSongs, getUpcomingSets } from '@/lib/actions/sets'
 import { Badge } from '@/components/ui/badge'
-import { buttonVariants } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { CreateSetDialogClient } from '@/components/create-set-dialog-client'
 import { AppLogo } from '@/components/app-logo'
@@ -14,6 +14,7 @@ import {
   CalendarAdd01Icon,
   Layers01Icon,
   MusicNote03Icon,
+  UserGroupIcon,
 } from '@hugeicons/core-free-icons'
 
 export default async function HomePage() {
@@ -62,19 +63,42 @@ export default async function HomePage() {
                           {formatRelativeDate(upcomingSet.service_date)}
                         </Badge>
                       </div>
-                      <CardDescription className="mt-2">
-                        {upcomingSet.music_groups.name} · {formatDateLong(upcomingSet.service_date)} ·{' '}
-                        {formatCount(upcomingSet.set_songs.length, 'song')}
+                      <CardDescription className="mt-3">
+                        <div className="flex flex-wrap items-center gap-4 text-sm font-medium text-foreground">
+                          <span className="inline-flex items-center gap-2">
+                            <HugeiconsIcon
+                              icon={UserGroupIcon}
+                              strokeWidth={2}
+                              className="h-4 w-4 text-muted-foreground"
+                            />
+                            {upcomingSet.music_groups.name}
+                          </span>
+                          <span className="inline-flex items-center gap-2">
+                            <HugeiconsIcon
+                              icon={CalendarAdd01Icon}
+                              strokeWidth={2}
+                              className="h-4 w-4 text-muted-foreground"
+                            />
+                            {formatDateLong(upcomingSet.service_date)}
+                          </span>
+                          <span className="inline-flex items-center gap-2">
+                            <HugeiconsIcon
+                              icon={MusicNote03Icon}
+                              strokeWidth={2}
+                              className="h-4 w-4 text-muted-foreground"
+                            />
+                            {formatCount(upcomingSet.set_songs.length, 'song')}
+                          </span>
+                        </div>
                       </CardDescription>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <Link
-                        href={`/groups/${upcomingSet.music_groups.slug}/sets/${upcomingSet.id}`}
-                        className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                      >
-                        View set details
-                        <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} className="h-4 w-4" />
-                      </Link>
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href={`/groups/${upcomingSet.music_groups.slug}/sets/${upcomingSet.id}`}>
+                          View set details
+                          <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} className="h-4 w-4" />
+                        </Link>
+                      </Button>
                     </div>
                   </div>
                 </CardHeader>
@@ -155,10 +179,10 @@ export default async function HomePage() {
                       slug: group.slug,
                     }))}
                     trigger={
-                      <button type="button" className={buttonVariants({ size: 'lg' })}>
+                      <Button type="button" size="lg">
                         <HugeiconsIcon icon={CalendarAdd01Icon} strokeWidth={2} className="h-4 w-4" />
                         Create upcoming set
-                      </button>
+                      </Button>
                     }
                   />
                 </CardContent>

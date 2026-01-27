@@ -26,12 +26,22 @@ function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
 
 function DialogOverlay({
   className,
+  onClick,
+  onPointerDown,
   ...props
 }: DialogPrimitive.Backdrop.Props) {
   return (
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
       className={cn("data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs fixed inset-0 isolate z-50", className)}
+      onPointerDown={(event) => {
+        event.stopPropagation()
+        onPointerDown?.(event)
+      }}
+      onClick={(event) => {
+        event.stopPropagation()
+        onClick?.(event)
+      }}
       {...props}
     />
   )
@@ -41,6 +51,8 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  onClick,
+  onPointerDown,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
@@ -54,14 +66,24 @@ function DialogContent({
           "bg-background data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-foreground/10 grid max-w-[calc(100%-2rem)] gap-4 rounded-none p-4 text-xs/relaxed ring-1 duration-100 sm:max-w-sm fixed top-1/2 left-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2 outline-none",
           className
         )}
+        onPointerDown={(event) => {
+          event.stopPropagation()
+          onPointerDown?.(event)
+        }}
+        onClick={(event) => {
+          event.stopPropagation()
+          onClick?.(event)
+        }}
         {...props}
       >
         {children}
         {showCloseButton && (
-          <DialogPrimitive.Close
+          <DialogClose
             data-slot="dialog-close"
+            aria-label="Close"
             render={
               <Button
+                type="button"
                 variant="ghost"
                 className="absolute top-2 right-2"
                 size="icon-sm"
@@ -70,7 +92,7 @@ function DialogContent({
           >
             <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
             <span className="sr-only">Close</span>
-          </DialogPrimitive.Close>
+          </DialogClose>
         )}
       </DialogPrimitive.Popup>
     </DialogPortal>

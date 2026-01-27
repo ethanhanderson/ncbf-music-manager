@@ -4,9 +4,8 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { type ColumnDef } from "@tanstack/react-table"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowUpDownIcon, MoreHorizontalIcon, Edit01Icon, Delete02Icon, MusicNote03Icon, CalendarAdd01Icon, Download01Icon } from "@hugeicons/core-free-icons"
+import { ArrowDown04Icon, ArrowUp04Icon, ArrowUpDownIcon, MoreHorizontalIcon, Edit01Icon, Delete02Icon, MusicNote03Icon, CalendarAdd01Icon, Download01Icon, CheckmarkCircle02Icon } from "@hugeicons/core-free-icons"
 
-import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -60,19 +59,24 @@ function formatExportDate(dateString: string): string {
 export const columns: ColumnDef<SetRow>[] = [
   {
     accessorKey: "serviceDate",
-    header: ({ column }) => (
-      <button
-        type="button"
-        className="inline-flex h-8 items-center gap-2 px-2 text-xs uppercase tracking-wide text-muted-foreground"
-        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-      >
-        Service date
-        <HugeiconsIcon icon={ArrowUpDownIcon} strokeWidth={2} className="h-4 w-4" />
-      </button>
-    ),
+    header: ({ column }) => {
+      const sort = column.getIsSorted()
+      const icon = sort === "asc" ? ArrowUp04Icon : sort === "desc" ? ArrowDown04Icon : ArrowUpDownIcon
+
+      return (
+        <button
+          type="button"
+          className="inline-flex h-8 items-center gap-2 px-2 text-xs uppercase tracking-wide text-muted-foreground"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Service date
+          <HugeiconsIcon icon={icon} strokeWidth={2} className="h-4 w-4" />
+        </button>
+      )
+    },
     cell: ({ row }) => {
       const dateLabel = formatServiceDate(row.original.serviceDate)
-      return <div className="text-sm font-medium whitespace-nowrap">{dateLabel}</div>
+      return <div className="px-2 text-sm font-medium whitespace-nowrap">{dateLabel}</div>
     },
     filterFn: (row, id, value) => {
       const timeframe = value as "all" | "next-30" | "next-90" | "past-30" | "past-90"
@@ -110,28 +114,37 @@ export const columns: ColumnDef<SetRow>[] = [
   },
   {
     accessorKey: "songCount",
-    header: ({ column }) => (
-      <button
-        type="button"
-        className="inline-flex h-8 items-center gap-2 px-2 text-xs uppercase tracking-wide text-muted-foreground"
-        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-      >
-        Songs
-        <HugeiconsIcon icon={ArrowUpDownIcon} strokeWidth={2} className="h-4 w-4" />
-      </button>
-    ),
+    header: ({ column }) => {
+      const sort = column.getIsSorted()
+      const icon = sort === "asc" ? ArrowUp04Icon : sort === "desc" ? ArrowDown04Icon : ArrowUpDownIcon
+
+      return (
+        <button
+          type="button"
+          className="inline-flex h-8 items-center gap-2 px-2 text-xs uppercase tracking-wide text-muted-foreground"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Songs
+          <HugeiconsIcon icon={icon} strokeWidth={2} className="h-4 w-4" />
+        </button>
+      )
+    },
     cell: ({ row }) => (
-      <div className="text-sm text-muted-foreground">{row.original.songCount}</div>
+      <div className="px-2 text-sm text-muted-foreground">{row.original.songCount}</div>
     ),
   },
   {
     accessorKey: "status",
     header: "Status",
-    cell: ({ row }) => (
-      <Badge variant={row.original.status === "upcoming" ? "default" : "secondary"}>
-        {row.original.status === "upcoming" ? "Upcoming" : "Past"}
-      </Badge>
-    ),
+    cell: ({ row }) => {
+      const isUpcoming = row.original.status === "upcoming"
+      return (
+        <div className="inline-flex items-center gap-2 text-xs font-medium text-foreground">
+          <HugeiconsIcon icon={isUpcoming ? CalendarAdd01Icon : CheckmarkCircle02Icon} strokeWidth={2} className="h-3.5 w-3.5" />
+          <span>{isUpcoming ? "Upcoming" : "Past"}</span>
+        </div>
+      )
+    },
     filterFn: (row, id, value) => {
       if (!value || value === "all") return true
       return row.getValue<string>(id) === value
@@ -161,6 +174,14 @@ function SetActionsCell({ set }: { set: SetRow }) {
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
+  const [exportSongs, setExportSongs] = useState<Array<{
+    songId: string
+    title: string
+    arrangementId: string | null
+    position: number
+  }> | null>(null)
+  const [exportSongsError, setExportSongsError] = useState<string | null>(null)
+  const [isLoadingExportSongs, setIsLoadingExportSongs] = useState(false)
 
   const handleEditSuccess = () => {
     setEditDialogOpen(false)
@@ -172,13 +193,50 @@ function SetActionsCell({ set }: { set: SetRow }) {
     router.refresh()
   }
 
+  const handleExportOpenChange = (nextOpen: boolean) => {
+    setExportDialogOpen(nextOpen)
+    if (!nextOpen) {
+      setExportSongsError(null)
+    }
+  }
+
+  const handleExportClick = async () => {
+    if (isLoadingExportSongs) return
+    if (exportSongs) {
+      setExportDialogOpen(true)
+      return
+    }
+
+    setIsLoadingExportSongs(true)
+    setExportSongsError(null)
+    try {
+      const response = await fetch(`/api/sets/${set.id}/export-data`)
+      if (!response.ok) {
+        throw new Error('Failed to load set songs.')
+      }
+      const payload = await response.json()
+      const nextSongs = Array.isArray(payload?.songs) ? payload.songs : []
+      setExportSongs(nextSongs)
+      setExportDialogOpen(true)
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : 'Failed to load set songs.'
+      setExportSongsError(message)
+      setExportDialogOpen(true)
+    } finally {
+      setIsLoadingExportSongs(false)
+    }
+  }
+
   return (
     <>
       <SetChartsExportDialog
         setId={set.id}
         setTitle={formatExportDate(set.serviceDate)}
         open={exportDialogOpen}
-        onOpenChange={setExportDialogOpen}
+        onOpenChange={handleExportOpenChange}
+        songs={exportSongs ?? []}
+        autoFetch={false}
+        prefetchError={exportSongsError}
         hideTrigger={true}
       />
       <DropdownMenu>
@@ -201,11 +259,12 @@ function SetActionsCell({ set }: { set: SetRow }) {
             <DropdownMenuItem
               onClick={(e) => {
                 e.stopPropagation()
-                setExportDialogOpen(true)
+                void handleExportClick()
               }}
+              disabled={isLoadingExportSongs}
             >
               <HugeiconsIcon icon={Download01Icon} strokeWidth={2} className="mr-2 h-4 w-4" />
-              Export charts
+              {isLoadingExportSongs ? "Loading charts..." : "Export charts"}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={(e) => {

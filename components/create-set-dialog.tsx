@@ -289,6 +289,10 @@ function SortableSongRow({
             <HugeiconsIcon icon={DragDropVerticalIcon} strokeWidth={2} className="h-4 w-4" />
           </button>
           <TruncatedSongTitle title={song.title} />
+          <Badge variant="outline" className="h-5 px-2 text-[10px] whitespace-nowrap gap-1">
+            <HugeiconsIcon icon={Layers01Icon} strokeWidth={2} className="h-3 w-3" />
+            <span className="truncate">{arrangementLabel}</span>
+          </Badge>
           {crossGroupMatches.length > 0 && (
             <Tooltip>
               <TooltipTrigger
@@ -639,13 +643,20 @@ export function CreateSetDialog({
 
   const selectedSongsPayload = useMemo(
     () =>
-      selectedSongs.map((song, index) => ({
-        songId: song.id,
-        arrangementId: song.arrangementId,
-        notes: song.notes?.trim() || null,
-        position: index + 1,
-      })),
-    [selectedSongs]
+      selectedSongs.map((song, index) => {
+        const songArrangements = arrangementsBySong.get(song.id) ?? []
+        const defaultArrangementId =
+          songArrangements.find((arrangement) => arrangement.name === 'Default')?.id ??
+          songArrangements[0]?.id ??
+          null
+        return {
+          songId: song.id,
+          arrangementId: song.arrangementId ?? defaultArrangementId,
+          notes: song.notes?.trim() || null,
+          position: index + 1,
+        }
+      }),
+    [arrangementsBySong, selectedSongs]
   )
 
   const handleAddSong = (song: Song) => {
