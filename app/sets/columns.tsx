@@ -4,7 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { type ColumnDef } from "@tanstack/react-table"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowUpDownIcon, MoreHorizontalIcon, Edit01Icon, Delete02Icon, EyeIcon, MusicNote03Icon, CalendarAdd01Icon } from "@hugeicons/core-free-icons"
+import { ArrowUpDownIcon, MoreHorizontalIcon, Edit01Icon, Delete02Icon, MusicNote03Icon, CalendarAdd01Icon, Download01Icon } from "@hugeicons/core-free-icons"
 
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { EditSetDialogContent } from "@/components/edit-set-dialog-content"
 import { DeleteSetDialogContent } from "@/components/delete-set-dialog-content"
+import { SetChartsExportDialog } from "@/components/set-charts-export-dialog"
 import { cn } from "@/lib/utils"
 
 export type SetRow = {
@@ -43,6 +44,16 @@ function formatServiceDate(dateString: string): string {
     weekday: "short",
     month: "short",
     day: "numeric",
+  })
+}
+
+function formatExportDate(dateString: string): string {
+  const date = new Date(dateString + "T00:00:00")
+  return date.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
   })
 }
 
@@ -149,6 +160,7 @@ function SetActionsCell({ set }: { set: SetRow }) {
   const router = useRouter()
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [exportDialogOpen, setExportDialogOpen] = useState(false)
 
   const handleEditSuccess = () => {
     setEditDialogOpen(false)
@@ -162,8 +174,16 @@ function SetActionsCell({ set }: { set: SetRow }) {
 
   return (
     <>
+      <SetChartsExportDialog
+        setId={set.id}
+        setTitle={formatExportDate(set.serviceDate)}
+        open={exportDialogOpen}
+        onOpenChange={setExportDialogOpen}
+        hideTrigger={true}
+      />
       <DropdownMenu>
         <DropdownMenuTrigger
+          data-row-click-ignore
           className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "p-0")}
           onClick={(event) => event.stopPropagation()}
           onKeyDown={(event) => event.stopPropagation()}
@@ -171,9 +191,22 @@ function SetActionsCell({ set }: { set: SetRow }) {
           <span className="sr-only">Open menu</span>
           <HugeiconsIcon icon={MoreHorizontalIcon} strokeWidth={2} className="h-4 w-4" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+        <DropdownMenuContent
+          align="end"
+          data-row-click-ignore
+          onClick={(e) => e.stopPropagation()}
+        >
           <DropdownMenuGroup onClick={(e) => e.stopPropagation()}>
             <DropdownMenuLabel onClick={(e) => e.stopPropagation()}>Actions</DropdownMenuLabel>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation()
+                setExportDialogOpen(true)
+              }}
+            >
+              <HugeiconsIcon icon={Download01Icon} strokeWidth={2} className="mr-2 h-4 w-4" />
+              Export charts
+            </DropdownMenuItem>
             <DropdownMenuItem
               onClick={(e) => {
                 e.stopPropagation()
@@ -194,15 +227,6 @@ function SetActionsCell({ set }: { set: SetRow }) {
               Delete
             </DropdownMenuItem>
             <DropdownMenuSeparator onClick={(e) => e.stopPropagation()} />
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation()
-                router.push(`/groups/${set.groupSlug}/sets/${set.id}`)
-              }}
-            >
-              <HugeiconsIcon icon={CalendarAdd01Icon} strokeWidth={2} className="mr-2 h-4 w-4" />
-              View set
-            </DropdownMenuItem>
             <DropdownMenuItem
               onClick={(e) => {
                 e.stopPropagation()

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { SingleFileUploader } from '@/components/ui/single-file-uploader'
+import { SingleFileUploader } from '@/components/single-file-uploader'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ButtonGroup } from '@/components/ui/button-group'
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
@@ -29,35 +29,6 @@ interface CreateSongDialogProps {
   groups?: MusicGroup[]
   defaultGroupSlug?: string
   trigger?: React.ReactElement
-}
-
-function parseSongInfoFromText(text: string): {
-  defaultKey?: string
-  ccliId?: string
-  artist?: string
-  linkUrl?: string
-} {
-  const result: { defaultKey?: string; ccliId?: string; artist?: string; linkUrl?: string } = {}
-  const t = text || ''
-
-  const ccliMatch = t.match(/CCLI\s*(?:#|ID)?\s*[:\-]?\s*(\d{4,})/i)
-  if (ccliMatch?.[1]) result.ccliId = ccliMatch[1]
-
-  const keyMatch = t.match(/\bKey\b\s*[:\-]?\s*([A-G](?:#|b)?m?)/i)
-  if (keyMatch?.[1]) result.defaultKey = keyMatch[1]
-
-  const artistMatch =
-    t.match(/\b(?:Artist|Author|Written by|Words(?:\s+and\s+Music)?\s+by|Music\s+by)\b\s*[:\-]?\s*(.+)/i) ??
-    null
-  if (artistMatch?.[1]) {
-    const line = artistMatch[1].split('\n')[0]?.trim()
-    if (line) result.artist = line
-  }
-
-  const urlMatch = t.match(/https?:\/\/\S+/i)
-  if (urlMatch?.[0]) result.linkUrl = urlMatch[0].replace(/[),.;]+$/, '')
-
-  return result
 }
 
 export function CreateSongDialog({
@@ -173,12 +144,15 @@ export function CreateSongDialog({
       setExtractedTitle(parsedTitle || null)
       setTitle(parsedTitle)
       setLyrics(parsedLyrics)
+      setDefaultKey('')
+      setCcliId('')
+      setArtist('')
+      setLinkUrl('')
 
-      const parsedInfo = parseSongInfoFromText(parsedLyrics)
-      if (parsedInfo.defaultKey) setDefaultKey(parsedInfo.defaultKey)
-      if (parsedInfo.ccliId) setCcliId(parsedInfo.ccliId)
-      if (parsedInfo.artist) setArtist(parsedInfo.artist)
-      if (parsedInfo.linkUrl) setLinkUrl(parsedInfo.linkUrl)
+      if (extractResult.defaultKey) setDefaultKey(extractResult.defaultKey)
+      if (extractResult.ccliId) setCcliId(extractResult.ccliId)
+      if (extractResult.artist) setArtist(extractResult.artist)
+      if (extractResult.linkUrl) setLinkUrl(extractResult.linkUrl)
 
       setDetailsOpen(true)
       setIsLoading(false)
@@ -271,12 +245,15 @@ export function CreateSongDialog({
       setExtractedTitle(parsedTitle || null)
       setTitle(parsedTitle)
       setLyrics(parsedLyrics)
+      setDefaultKey('')
+      setCcliId('')
+      setArtist('')
+      setLinkUrl('')
 
-      const parsedInfo = parseSongInfoFromText(parsedLyrics)
-      if (parsedInfo.defaultKey) setDefaultKey(parsedInfo.defaultKey)
-      if (parsedInfo.ccliId) setCcliId(parsedInfo.ccliId)
-      if (parsedInfo.artist) setArtist(parsedInfo.artist)
-      if (parsedInfo.linkUrl) setLinkUrl(parsedInfo.linkUrl)
+      if (extractResult.defaultKey) setDefaultKey(extractResult.defaultKey)
+      if (extractResult.ccliId) setCcliId(extractResult.ccliId)
+      if (extractResult.artist) setArtist(extractResult.artist)
+      if (extractResult.linkUrl) setLinkUrl(extractResult.linkUrl)
 
       // Lyrics-only duplicate check (even if title differs)
       const lyricDup = await checkForDuplicateLyrics(activeGroup.id, parsedLyrics)

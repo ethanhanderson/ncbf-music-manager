@@ -5,7 +5,7 @@ export interface RandomPickConfig {
   count: number
   playPreference: PlayPreference
   agePreference: AgePreference
-  avoidUpcoming: boolean
+  skipRecentlyPlayed: boolean
 }
 
 export interface SongPickCandidate {
@@ -18,7 +18,7 @@ export interface SongPickCandidate {
 export interface PickSongsInput {
   songs: SongPickCandidate[]
   selectedSongIds: string[]
-  upcomingSetSongIds: string[]
+  recentlyPlayedSongIds: string[]
   config: RandomPickConfig
   rng?: () => number
 }
@@ -90,15 +90,15 @@ function pickIndex(weights: number[], rng: () => number): number {
 export function pickWeightedSongs({
   songs,
   selectedSongIds,
-  upcomingSetSongIds,
+  recentlyPlayedSongIds,
   config,
   rng = Math.random,
 }: PickSongsInput): SongPickCandidate[] {
   const selectedSet = new Set(selectedSongIds)
-  const upcomingSet = new Set(upcomingSetSongIds)
+  const recentlyPlayedSet = new Set(recentlyPlayedSongIds)
   const candidates = songs.filter((song) => {
     if (selectedSet.has(song.id)) return false
-    if (config.avoidUpcoming && upcomingSet.has(song.id)) return false
+    if (config.skipRecentlyPlayed && recentlyPlayedSet.has(song.id)) return false
     return true
   })
 

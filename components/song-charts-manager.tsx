@@ -46,6 +46,7 @@ import {
   Loading01Icon,
   MinusSignIcon,
   PlusSignIcon,
+  Upload02Icon,
 } from '@hugeicons/core-free-icons'
 
 const VocalChartPreview = dynamic(
@@ -1437,6 +1438,7 @@ export function SongChartsManager({
           <div className="flex items-center gap-2">
             {activeChartType === 'chord' && (
               <Button variant="outline" size="sm" onClick={() => setIsImportOpen(true)}>
+                <HugeiconsIcon icon={Upload02Icon} strokeWidth={2} className="mr-1.5 h-4 w-4" />
                 Import
               </Button>
             )}

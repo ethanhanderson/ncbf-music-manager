@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
-import { getSongsWithArrangementsAndStats } from '@/lib/actions/songs'
+import { getCrossGroupSongMatches, getSongsWithArrangementsAndStats } from '@/lib/actions/songs'
 import { getUpcomingSetSongIds } from '@/lib/actions/sets'
+
+const CROSS_GROUP_LOOKBACK_DAYS = 365
 
 interface RouteParams {
   params: Promise<{ groupId: string }>
@@ -28,7 +30,7 @@ export async function GET(_: Request, { params }: RouteParams) {
     return NextResponse.json({ error: 'Group not found' }, { status: 404 })
   }
 
-  const [{ songs, arrangements }, { data: sets, error: setsError }, upcomingSetSongIds] =
+  const [{ songs, arrangements }, { data: sets, error: setsError }, upcomingSetSongIds, crossGroupMatches] =
     await Promise.all([
       getSongsWithArrangementsAndStats(group.id),
       supabase
@@ -37,6 +39,7 @@ export async function GET(_: Request, { params }: RouteParams) {
         .eq('group_id', group.id)
         .order('service_date', { ascending: false }),
       getUpcomingSetSongIds(group.id),
+      getCrossGroupSongMatches(group.id, CROSS_GROUP_LOOKBACK_DAYS),
     ])
 
   if (setsError) {
@@ -51,6 +54,9 @@ export async function GET(_: Request, { params }: RouteParams) {
     songs,
     arrangements,
     upcomingSetSongIds,
+    crossGroupMatches,
+    crossGroupLookbackDays: CROSS_GROUP_LOOKBACK_DAYS,
+    crossGroupMatchesLoaded: true,
     lastSetDate,
     existingSetDates,
   })

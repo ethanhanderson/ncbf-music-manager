@@ -57,14 +57,14 @@ function AccordionContent({
   return (
     <AccordionPrimitive.Panel
       data-slot="accordion-content"
-      className={cn(
-        "data-open:animate-accordion-down data-closed:animate-accordion-up text-xs overflow-hidden",
-        className
-      )}
+      className="data-open:animate-accordion-down data-closed:animate-accordion-up text-xs overflow-hidden"
       {...props}
     >
       <div
-        className="pt-0 pb-2.5 [&_a]:hover:text-foreground h-(--accordion-panel-height) data-ending-style:h-0 data-starting-style:h-0 [&_a]:underline [&_a]:underline-offset-3 [&_p:not(:last-child)]:mb-4"
+        className={cn(
+          "pt-0 pb-2.5 [&_a]:hover:text-foreground h-(--accordion-panel-height) data-ending-style:h-0 data-starting-style:h-0 [&_a]:underline [&_a]:underline-offset-3 [&_p:not(:last-child)]:mb-4",
+          className
+        )}
       >
         {children}
       </div>

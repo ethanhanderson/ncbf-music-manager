@@ -20,16 +20,6 @@ const ToggleGroupContext = React.createContext<
   orientation: "horizontal",
 })
 
-type ToggleGroupProps = Omit<ToggleGroupPrimitive.Props, "value" | "defaultValue" | "onValueChange"> &
-  VariantProps<typeof toggleVariants> & {
-    type?: "single" | "multiple"
-    value?: string | string[]
-    defaultValue?: string | string[]
-    onValueChange?: (value: string | string[]) => void
-    spacing?: number
-    orientation?: "horizontal" | "vertical"
-  }
-
 function ToggleGroup({
   className,
   variant,
@@ -37,16 +27,12 @@ function ToggleGroup({
   spacing = 0,
   orientation = "horizontal",
   children,
-  value,
-  defaultValue,
-  onValueChange,
-  type = "single",
   ...props
-}: ToggleGroupProps) {
-  const normalizedValue = value === undefined ? undefined : Array.isArray(value) ? value : [value]
-  const normalizedDefaultValue =
-    defaultValue === undefined ? undefined : Array.isArray(defaultValue) ? defaultValue : [defaultValue]
-
+}: ToggleGroupPrimitive.Props &
+  VariantProps<typeof toggleVariants> & {
+    spacing?: number
+    orientation?: "horizontal" | "vertical"
+  }) {
   return (
     <ToggleGroupPrimitive
       data-slot="toggle-group"
@@ -59,16 +45,6 @@ function ToggleGroup({
         "rounded-none data-[size=sm]:rounded-none group/toggle-group flex w-fit flex-row items-center gap-[--spacing(var(--gap))] data-[orientation=vertical]:flex-col data-[orientation=vertical]:items-stretch",
         className
       )}
-      value={normalizedValue}
-      defaultValue={normalizedDefaultValue}
-      onValueChange={(nextValue) => {
-        if (!onValueChange) return
-        if (type === "multiple") {
-          onValueChange(nextValue)
-          return
-        }
-        onValueChange(nextValue[0] ?? "")
-      }}
       {...props}
     >
       <ToggleGroupContext.Provider
@@ -80,15 +56,17 @@ function ToggleGroup({
   )
 }
 
-const ToggleGroupItem = React.forwardRef<
-  HTMLButtonElement,
-  TogglePrimitive.Props & VariantProps<typeof toggleVariants>
->(({ className, children, variant = "default", size = "default", ...props }, ref) => {
+function ToggleGroupItem({
+  className,
+  children,
+  variant = "default",
+  size = "default",
+  ...props
+}: TogglePrimitive.Props & VariantProps<typeof toggleVariants>) {
   const context = React.useContext(ToggleGroupContext)
 
   return (
     <TogglePrimitive
-      ref={ref}
       data-slot="toggle-group-item"
       data-variant={context.variant || variant}
       data-size={context.size || size}
@@ -106,8 +84,6 @@ const ToggleGroupItem = React.forwardRef<
       {children}
     </TogglePrimitive>
   )
-})
-
-ToggleGroupItem.displayName = "ToggleGroupItem"
+}
 
 export { ToggleGroup, ToggleGroupItem }

@@ -10,6 +10,7 @@ import {
   type SongSlideGroup,
 } from '@/lib/supabase/server'
 import { extractText } from '@/lib/extractors'
+import { hasLyricGroupHeadings } from '@/lib/song-import'
 import { createSongRevisionSnapshot } from '@/lib/actions/song-revisions'
 
 const GROUP_KEY_SEPARATOR = '::'
@@ -766,7 +767,10 @@ export async function createDefaultArrangementFromLyrics(
     .eq('song_id', songId)
 
   const isNewSong = (existingGroupsCount.count ?? 0) === 0
-  const slides = await parseLyricsToSlides(lyricsText, { forceUngrouped: isNewSong })
+  const hasGroupHeadings = hasLyricGroupHeadings(lyricsText)
+  const slides = await parseLyricsToSlides(lyricsText, {
+    forceUngrouped: isNewSong && !hasGroupHeadings,
+  })
 
   const { data: existing } = await supabase
     .from('song_arrangements')

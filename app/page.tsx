@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { getGroupsWithCounts } from '@/lib/actions/groups'
 import { getUpcomingSetWithSongs, getUpcomingSets } from '@/lib/actions/sets'
 import { Badge } from '@/components/ui/badge'
-import { buttonVariants } from '@/components/ui/button-variants'
+import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { CreateSetDialogClient } from '@/components/create-set-dialog-client'
 import { AppLogo } from '@/components/app-logo'
@@ -56,15 +56,18 @@ export default async function HomePage() {
                 <CardHeader className="border-b border-border/60">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
-                      <CardTitle className="text-2xl">
-                        Upcoming Sunday: {formatDateLong(upcomingSet.service_date)}
-                      </CardTitle>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <CardTitle className="text-2xl">Upcoming set</CardTitle>
+                        <Badge variant="outline">
+                          {formatRelativeDate(upcomingSet.service_date)}
+                        </Badge>
+                      </div>
                       <CardDescription className="mt-2">
-                        Music led by {upcomingSet.music_groups.name}
+                        {upcomingSet.music_groups.name} · {formatDateLong(upcomingSet.service_date)} ·{' '}
+                        {formatCount(upcomingSet.set_songs.length, 'song')}
                       </CardDescription>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline">{upcomingSet.music_groups.name}</Badge>
                       <Link
                         href={`/groups/${upcomingSet.music_groups.slug}/sets/${upcomingSet.id}`}
                         className={buttonVariants({ variant: 'outline', size: 'sm' })}
@@ -75,11 +78,8 @@ export default async function HomePage() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
+                <CardContent className="space-y-4">
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>{upcomingSet.set_songs.length} songs selected</span>
-                    </div>
                     {upcomingSet.set_songs.length === 0 ? (
                       <div className="rounded-none border border-dashed border-border/60 px-4 py-8 text-center">
                         <p className="text-muted-foreground">No songs have been added yet.</p>
@@ -91,45 +91,51 @@ export default async function HomePage() {
                       <ol className="space-y-3">
                         {upcomingSet.set_songs.map((setSong, index) => {
                           const arrangementLabel = setSong.song_arrangements?.name ?? 'No arrangement'
+                          const songId = setSong.songs?.id
+                          const songTitle = setSong.songs?.title ?? 'Untitled song'
+                          const songHref = songId
+                            ? `/groups/${upcomingSet.music_groups.slug}/songs/${songId}`
+                            : null
                           return (
                             <li
                               key={setSong.id}
-                              className="flex flex-col gap-2 rounded-none border border-border/60 px-3 py-3"
+                              className="rounded-none border border-border/60"
                             >
-                              <div className="flex items-start gap-3">
-                                <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-none border border-border/60 text-xs font-semibold">
-                                  {index + 1}
+                              {songHref ? (
+                                <Link
+                                  href={songHref}
+                                  className="flex items-center justify-between gap-3 px-3 py-2 transition-colors hover:bg-muted/40"
+                                >
+                                  <div className="flex min-w-0 items-center gap-3">
+                                    <span className="text-base font-semibold text-foreground">
+                                      {index + 1}
+                                    </span>
+                                    <span className="truncate text-sm font-medium">{songTitle}</span>
+                                  </div>
+                                  <Badge variant="outline" className="flex items-center gap-2 text-xs">
+                                    <HugeiconsIcon icon={Layers01Icon} strokeWidth={2} className="h-4 w-4" />
+                                    <span className="truncate">{arrangementLabel}</span>
+                                  </Badge>
+                                </Link>
+                              ) : (
+                                <div className="flex items-center justify-between gap-3 px-3 py-2">
+                                  <div className="flex min-w-0 items-center gap-3">
+                                    <span className="text-base font-semibold text-foreground">
+                                      {index + 1}
+                                    </span>
+                                    <span className="truncate text-sm font-medium">{songTitle}</span>
+                                  </div>
+                                  <Badge variant="outline" className="flex items-center gap-2 text-xs">
+                                    <HugeiconsIcon icon={Layers01Icon} strokeWidth={2} className="h-4 w-4" />
+                                    <span className="truncate">{arrangementLabel}</span>
+                                  </Badge>
                                 </div>
-                                <div className="flex-1">
-                                  <p className="text-sm font-medium">{setSong.songs?.title ?? 'Untitled song'}</p>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 rounded-none border border-border/60 bg-muted/30 px-2 py-1 text-xs text-muted-foreground">
-                                <HugeiconsIcon icon={Layers01Icon} strokeWidth={2} className="h-4 w-4" />
-                                {arrangementLabel}
-                              </div>
+                              )}
                             </li>
                           )
                         })}
                       </ol>
                     )}
-                  </div>
-                  <div className="rounded-none border border-dashed border-border/60 bg-muted/20 px-4 py-4">
-                    <div className="flex items-start gap-3">
-                      <HugeiconsIcon icon={Layers01Icon} strokeWidth={2} className="h-5 w-5 text-muted-foreground" />
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">Arrangement notes</p>
-                        <p className="text-sm text-muted-foreground">
-                          Share chord charts, transitions, and any special cues for the team.
-                        </p>
-                        <Link
-                          href={`/groups/${upcomingSet.music_groups.slug}/sets/${upcomingSet.id}`}
-                          className={buttonVariants({ size: 'sm' })}
-                        >
-                          Open full set
-                        </Link>
-                      </div>
-                    </div>
                   </div>
                 </CardContent>
               </>
@@ -266,6 +272,28 @@ function formatDateLong(dateString: string): string {
     month: 'long',
     day: 'numeric',
   })
+}
+
+function formatRelativeDate(dateString: string): string {
+  const target = new Date(dateString + 'T00:00:00')
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const diffMs = target.getTime() - today.getTime()
+  const diffDays = Math.round(diffMs / 86_400_000)
+
+  if (diffDays === 0) {
+    return 'Today'
+  }
+  if (diffDays === 1) {
+    return 'Tomorrow'
+  }
+  if (diffDays === -1) {
+    return 'Yesterday'
+  }
+  if (diffDays > 1) {
+    return `In ${diffDays} days`
+  }
+  return `${Math.abs(diffDays)} days ago`
 }
 
 function formatCount(count: number, label: string): string {

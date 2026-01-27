@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic'
 
-import SongPageContent from '../song-page-content'
+import SongPageContent from '../_components/song-page-content'
 
 interface SongChartsPageProps {
   params: Promise<{ slug: string; songId: string }>

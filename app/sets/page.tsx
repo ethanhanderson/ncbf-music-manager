@@ -3,8 +3,8 @@ export const revalidate = 60
 import Link from 'next/link'
 import { getGroups } from '@/lib/actions/groups'
 import { getAllSetsWithGroups } from '@/lib/actions/sets'
-import { columns, type SetRow } from './columns'
-import { DataTable } from './data-table'
+import { columns, type SetRow } from './_components/columns'
+import { DataTable } from './_components/data-table'
 import {
   Breadcrumb,
   BreadcrumbItem,

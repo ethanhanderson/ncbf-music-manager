@@ -179,15 +179,22 @@ const SortableSongRow = memo(function SortableSongRow({
   isLoadingArrangements: boolean
   onOpenArrangements: () => void
 }) {
+  const defaultArrangementId = useMemo(() => {
+    const defaultArrangement = arrangements.find(
+      (arrangement) => arrangement.is_locked || arrangement.name === 'Default'
+    )
+    return defaultArrangement?.id ?? arrangements[0]?.id ?? null
+  }, [arrangements])
+  const effectiveArrangementId = setSong.arrangement_id ?? defaultArrangementId
   const arrangementLabel = useMemo(() => {
     if (isLoadingArrangements) return 'Loading...'
-    if (!setSong.arrangement_id) return 'No arrangement'
+    if (!effectiveArrangementId) return arrangements.length > 0 ? 'Unknown arrangement' : 'No arrangements'
     return (
-      arrangements.find((arrangement) => arrangement.id === setSong.arrangement_id)?.name ??
+      arrangements.find((arrangement) => arrangement.id === effectiveArrangementId)?.name ??
       setSong.song_arrangements?.name ??
       'Unknown arrangement'
     )
-  }, [arrangements, isLoadingArrangements, setSong.arrangement_id, setSong.song_arrangements?.name])
+  }, [arrangements, effectiveArrangementId, isLoadingArrangements, setSong.song_arrangements?.name])
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
     useSortable({ id: setSong.id })
   const [notesDraft, setNotesDraft] = useState(setSong.notes ?? '')
@@ -299,15 +306,14 @@ const SortableSongRow = memo(function SortableSongRow({
                     <div className="space-y-2">
                       <Label className="text-xs text-muted-foreground">Arrangement</Label>
                       <Select
-                        value={setSong.arrangement_id ?? 'none'}
-                        onValueChange={(value) => onArrangementChange(value === 'none' ? null : value)}
-                        disabled={isLoadingArrangements}
+                        value={effectiveArrangementId ?? ''}
+                        onValueChange={(value) => onArrangementChange(value)}
+                        disabled={isLoadingArrangements || arrangements.length === 0}
                       >
                         <SelectTrigger className="h-8 w-full">
                           <SelectValue>{arrangementLabel}</SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="none">No arrangement</SelectItem>
                           {arrangements.map((arrangement) => (
                             <SelectItem key={arrangement.id} value={arrangement.id}>
                               {arrangement.name}

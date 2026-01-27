@@ -39,14 +39,13 @@ export function RadioCardGroup({
         return (
           <div
             key={option.value}
-            className="relative flex cursor-pointer flex-col items-center justify-center gap-2 border border-input px-2 py-3 text-center shadow-xs outline-none transition-[color,box-shadow] rounded-none has-data-[state=checked]:border-primary/50 has-focus-visible:border-ring has-focus-visible:ring-[3px] has-focus-visible:ring-ring/50"
+            className="relative flex cursor-pointer flex-col items-center justify-center gap-2 border border-input px-2 py-2.5 text-center shadow-xs outline-none transition-[color,box-shadow] rounded-none has-data-[state=checked]:border-primary/50 has-focus-visible:border-ring has-focus-visible:ring-[3px] has-focus-visible:ring-ring/50"
           >
-            <RadioGroupItem className="sr-only" id={optionId} value={option.value} />
             {option.icon && (
               <HugeiconsIcon
                 icon={option.icon}
                 strokeWidth={2}
-                className="h-4 w-4 text-muted-foreground"
+                className="h-5 w-5 text-muted-foreground opacity-60"
                 aria-hidden="true"
               />
             )}
@@ -56,6 +55,7 @@ export function RadioCardGroup({
             >
               {option.label}
             </label>
+            <RadioGroupItem className="sr-only absolute" id={optionId} value={option.value} />
           </div>
         )
       })}

@@ -10,6 +10,7 @@ import { SetSongListClient } from '@/components/set-song-list-client'
 import { AddSongToSet } from '@/components/add-song-to-set'
 import { EditSetDialog } from '@/components/edit-set-dialog'
 import { DeleteSetButton } from '@/components/delete-set-button'
+import { SetChartsExportDialog } from '@/components/set-charts-export-dialog'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -140,17 +141,16 @@ export default async function SetPage({ params }: SetPageProps) {
                 <CardTitle className="text-base">Export</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                <a 
-                  href={`/api/sets/${set.id}/propresenter.zip`} 
-                  download
-                  className="inline-flex items-center justify-start w-full h-8 px-2.5 text-xs font-medium border border-border bg-background hover:bg-muted rounded-none transition-all"
-                >
-                  <HugeiconsIcon icon={Download01Icon} strokeWidth={2} className="mr-2 h-4 w-4" />
-                  Download for ProPresenter
-                </a>
-                <p className="text-xs text-muted-foreground">
-                  Downloads a .zip file with .txt lyrics for each song
-                </p>
+                <SetChartsExportDialog
+                  setId={set.id}
+                  setTitle={formatDate(set.service_date)}
+                  songs={set.set_songs.map((setSong, index) => ({
+                    songId: setSong.song_id,
+                    title: setSong.songs?.title ?? `Song ${index + 1}`,
+                    arrangementId: setSong.arrangement_id ?? null,
+                    position: setSong.position,
+                  }))}
+                />
               </CardContent>
             </Card>
           </aside>

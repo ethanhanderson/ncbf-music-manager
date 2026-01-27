@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { SingleFileUploader } from '@/components/ui/single-file-uploader'
+import { SingleFileUploader } from '@/components/single-file-uploader'
 import { Switch } from '@/components/ui/switch'
 import type { ChartImportResponse } from '@/lib/charts/import/types'
 

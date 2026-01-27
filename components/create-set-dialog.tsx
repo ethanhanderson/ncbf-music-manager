@@ -39,7 +39,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { createSet } from '@/lib/actions/sets'
-import type { SongArrangementSummary } from '@/lib/actions/songs'
+import type { CrossGroupSongMatchSummary, SongArrangementSummary } from '@/lib/actions/songs'
 import type { Song } from '@/lib/supabase/server'
 import { cn } from '@/lib/utils'
 import {
@@ -95,6 +95,9 @@ export interface CreateSetDialogProps {
   songs?: Song[]
   arrangements?: SongArrangementSummary[]
   upcomingSetSongIds?: string[]
+  crossGroupMatches?: Record<string, CrossGroupSongMatchSummary>
+  crossGroupLookbackDays?: number
+  crossGroupMatchesLoaded?: boolean
   lastSetDate?: string // YYYY-MM-DD format of the most recent set's service date
   existingSetDates?: string[] // All existing set dates in YYYY-MM-DD format
   groups?: Array<{ id: string; name: string; slug: string }>
@@ -212,24 +215,52 @@ function formatSongUsageDate(dateString?: string | null) {
   }
 }
 
+function formatMatchType(matchType: 'title' | 'title_and_lyrics' | 'lyrics') {
+  switch (matchType) {
+    case 'title_and_lyrics':
+      return 'Title + lyrics match'
+    case 'lyrics':
+      return 'Lyrics match'
+    default:
+      return 'Title match'
+  }
+}
+
+function isDateWithinWeeks(dateString: string, weeks: number) {
+  const date = new Date(`${dateString}T00:00:00`)
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - weeks * 7)
+  return date >= cutoff
+}
+
 function SortableSongRow({
   song,
   arrangements,
   onRemove,
   onArrangementChange,
   onNotesChange,
+  crossGroupSummary,
 }: {
   song: SelectedSetSong
   arrangements: SongArrangementSummary[]
   onRemove: () => void
   onArrangementChange: (arrangementId: string | null) => void
   onNotesChange: (notes: string) => void
+  crossGroupSummary?: CrossGroupSongMatchSummary
 }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
     useSortable({ id: song.id })
-  const arrangementLabel = song.arrangementId
-    ? arrangements.find((arrangement) => arrangement.id === song.arrangementId)?.name ?? 'Unknown arrangement'
-    : 'No arrangement'
+  const defaultArrangementId =
+    arrangements.find((arrangement) => arrangement.name === 'Default')?.id ??
+    arrangements[0]?.id ??
+    null
+  const effectiveArrangementId = song.arrangementId ?? defaultArrangementId
+  const arrangementLabel = effectiveArrangementId
+    ? arrangements.find((arrangement) => arrangement.id === effectiveArrangementId)?.name ?? 'Unknown arrangement'
+    : 'No arrangements'
+  const crossGroupMatches = crossGroupSummary?.matches ?? []
+  const visibleMatches = crossGroupMatches.slice(0, 3)
+  const hiddenMatchCount = Math.max(0, crossGroupMatches.length - visibleMatches.length)
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -258,6 +289,42 @@ function SortableSongRow({
             <HugeiconsIcon icon={DragDropVerticalIcon} strokeWidth={2} className="h-4 w-4" />
           </button>
           <TruncatedSongTitle title={song.title} />
+          {crossGroupMatches.length > 0 && (
+            <Tooltip>
+              <TooltipTrigger
+                render={(triggerProps) => (
+                  <Badge
+                    {...triggerProps}
+                    variant="secondary"
+                    className="h-5 px-2 text-[10px] whitespace-nowrap cursor-default"
+                  >
+                    Seen elsewhere
+                  </Badge>
+                )}
+              />
+              <TooltipContent className="max-w-xs">
+                <div className="space-y-2 text-xs">
+                  {visibleMatches.map((match) => {
+                    const usage = formatSongUsageDate(match.lastUsedDate)
+                    return (
+                      <div key={match.matchedSongId} className="space-y-0.5">
+                        <div className="font-medium">
+                          {match.matchedSongTitle} · {match.matchedGroup.name}
+                        </div>
+                        <div className="text-muted-foreground">
+                          {formatMatchType(match.matchType)}
+                          {usage?.relative ? ` · last used ${usage.relative}` : ''}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {hiddenMatchCount > 0 && (
+                    <div className="text-muted-foreground">+{hiddenMatchCount} more matches</div>
+                  )}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          )}
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           <Popover>
@@ -291,14 +358,14 @@ function SortableSongRow({
               <div className="space-y-2">
                 <Label className="text-xs text-muted-foreground">Arrangement</Label>
                 <Select
-                  value={song.arrangementId ?? 'none'}
-                  onValueChange={(value) => onArrangementChange(value === 'none' ? null : value)}
+                  value={effectiveArrangementId ?? ''}
+                  onValueChange={(value) => onArrangementChange(value)}
+                  disabled={arrangements.length === 0}
                 >
                   <SelectTrigger className="h-8 w-full">
                     <SelectValue>{arrangementLabel}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No arrangement</SelectItem>
                     {arrangements.map((arrangement) => (
                       <SelectItem key={arrangement.id} value={arrangement.id}>
                         {arrangement.name}
@@ -403,6 +470,9 @@ export function CreateSetDialog({
   songs = [],
   arrangements = [],
   upcomingSetSongIds = [],
+  crossGroupMatches: initialCrossGroupMatches = {},
+  crossGroupLookbackDays: initialCrossGroupLookbackDays = 365,
+  crossGroupMatchesLoaded: initialCrossGroupMatchesLoaded = false,
   lastSetDate,
   existingSetDates = [],
   groups = [],
@@ -418,6 +488,11 @@ export function CreateSetDialog({
   const [activeUpcomingSetSongIds, setActiveUpcomingSetSongIds] = useState<string[]>(upcomingSetSongIds)
   const [activeLastSetDate, setActiveLastSetDate] = useState<string | undefined>(lastSetDate)
   const [activeExistingSetDates, setActiveExistingSetDates] = useState<string[]>(existingSetDates)
+  const [crossGroupMatchesBySongId, setCrossGroupMatchesBySongId] = useState<
+    Record<string, CrossGroupSongMatchSummary>
+  >(initialCrossGroupMatches)
+  const [crossGroupLookbackDays, setCrossGroupLookbackDays] = useState(initialCrossGroupLookbackDays)
+  const [crossGroupMatchesLoaded, setCrossGroupMatchesLoaded] = useState(initialCrossGroupMatchesLoaded)
   const [isGroupLoading, setIsGroupLoading] = useState(false)
   const isDialogDataLoadingRef = useRef(false)
 
@@ -446,7 +521,8 @@ export function CreateSetDialog({
   const [randomCount, setRandomCount] = useState(5)
   const [randomPlayPreference, setRandomPlayPreference] = useState<PlayPreference>('neutral')
   const [randomAgePreference, setRandomAgePreference] = useState<AgePreference>('neutral')
-  const [randomAvoidUpcoming, setRandomAvoidUpcoming] = useState(true)
+  const [randomSkipRecentlyPlayed, setRandomSkipRecentlyPlayed] = useState(true)
+  const [randomRecentWeeks, setRandomRecentWeeks] = useState(8)
   const [randomApplyMode, setRandomApplyMode] = useState<'append' | 'replace'>('append')
   const router = useRouter()
 
@@ -507,6 +583,36 @@ export function CreateSetDialog({
     [activeUpcomingSetSongIds]
   )
 
+  const recentWindowOptions = useMemo(() => {
+    const maxWeeks = Math.max(1, Math.floor(crossGroupLookbackDays / 7))
+    const options = [1, 2, 3, 4, 5].filter((weeks) => weeks <= maxWeeks)
+    return options.length ? options : [maxWeeks]
+  }, [crossGroupLookbackDays])
+
+  useEffect(() => {
+    if (recentWindowOptions.includes(randomRecentWeeks)) return
+    setRandomRecentWeeks(recentWindowOptions[recentWindowOptions.length - 1])
+  }, [randomRecentWeeks, recentWindowOptions])
+
+  const recentCrossGroupSongIdSet = useMemo(() => {
+    if (!randomSkipRecentlyPlayed) return new Set<string>()
+    const recentIds = new Set<string>()
+    const entries = Object.entries(crossGroupMatchesBySongId)
+    entries.forEach(([songId, summary]) => {
+      if (!summary?.lastUsedDate) return
+      if (isDateWithinWeeks(summary.lastUsedDate, randomRecentWeeks)) {
+        recentIds.add(songId)
+      }
+    })
+    activeSongs.forEach((song) => {
+      if (!song.lastUsedDate) return
+      if (isDateWithinWeeks(song.lastUsedDate, randomRecentWeeks)) {
+        recentIds.add(song.id)
+      }
+    })
+    return recentIds
+  }, [activeSongs, crossGroupMatchesBySongId, randomRecentWeeks, randomSkipRecentlyPlayed])
+
   const randomCandidateCount = useMemo(() => {
     const selectedIdSet =
       randomApplyMode === 'replace'
@@ -514,10 +620,16 @@ export function CreateSetDialog({
         : new Set(selectedSongs.map((song) => song.id))
     return activeSongs.filter((song) => {
       if (selectedIdSet.has(song.id)) return false
-      if (randomAvoidUpcoming && upcomingSetSongIdSet.has(song.id)) return false
+      if (randomSkipRecentlyPlayed && recentCrossGroupSongIdSet.has(song.id)) return false
       return true
     }).length
-  }, [activeSongs, randomApplyMode, randomAvoidUpcoming, selectedSongs, upcomingSetSongIdSet])
+  }, [
+    activeSongs,
+    randomApplyMode,
+    randomSkipRecentlyPlayed,
+    recentCrossGroupSongIdSet,
+    selectedSongs,
+  ])
   const maxRandomCount = Math.max(1, randomCandidateCount)
 
   useEffect(() => {
@@ -541,7 +653,11 @@ export function CreateSetDialog({
       if (prev.some((item) => item.id === song.id)) {
         return prev
       }
-      const defaultArrangement = arrangementsBySong.get(song.id)?.[0]?.id ?? null
+      const songArrangements = arrangementsBySong.get(song.id) ?? []
+      const defaultArrangement =
+        songArrangements.find((arrangement) => arrangement.name === 'Default')?.id ??
+        songArrangements[0]?.id ??
+        null
       return [
         ...prev,
         {
@@ -560,7 +676,11 @@ export function CreateSetDialog({
 
   const buildSelectedSong = useCallback(
     (song: { id: string; title: string }): SelectedSetSong => {
-      const defaultArrangement = arrangementsBySong.get(song.id)?.[0]?.id ?? null
+      const songArrangements = arrangementsBySong.get(song.id) ?? []
+      const defaultArrangement =
+        songArrangements.find((arrangement) => arrangement.name === 'Default')?.id ??
+        songArrangements[0]?.id ??
+        null
       return {
         id: song.id,
         title: song.title,
@@ -574,6 +694,9 @@ export function CreateSetDialog({
   const handleRandomPick = useCallback(() => {
     const selectedIds =
       randomApplyMode === 'replace' ? [] : selectedSongs.map((song) => song.id)
+    const recentlyPlayedSongIds = randomSkipRecentlyPlayed
+      ? Array.from(recentCrossGroupSongIdSet)
+      : []
     const picks = pickWeightedSongs({
       songs: activeSongs.map((song) => ({
         id: song.id,
@@ -582,12 +705,12 @@ export function CreateSetDialog({
         totalUses: song.totalUses ?? 0,
       })),
       selectedSongIds: selectedIds,
-      upcomingSetSongIds: activeUpcomingSetSongIds,
+      recentlyPlayedSongIds,
       config: {
         count: randomCount,
         playPreference: randomPlayPreference,
         agePreference: randomAgePreference,
-        avoidUpcoming: randomAvoidUpcoming,
+        skipRecentlyPlayed: randomSkipRecentlyPlayed,
       },
     })
 
@@ -610,13 +733,13 @@ export function CreateSetDialog({
     setIsRandomPickerOpen(false)
   }, [
     activeSongs,
-    activeUpcomingSetSongIds,
     buildSelectedSong,
     randomAgePreference,
     randomApplyMode,
-    randomAvoidUpcoming,
     randomCount,
     randomPlayPreference,
+    randomSkipRecentlyPlayed,
+    recentCrossGroupSongIdSet,
     selectedSongs,
   ])
 
@@ -692,6 +815,9 @@ export function CreateSetDialog({
           songs: SongWithStats[]
           arrangements: SongArrangementSummary[]
           upcomingSetSongIds: string[]
+          crossGroupMatches: Record<string, CrossGroupSongMatchSummary>
+          crossGroupLookbackDays: number
+          crossGroupMatchesLoaded: boolean
           lastSetDate: string | null
           existingSetDates: string[]
         }
@@ -703,6 +829,9 @@ export function CreateSetDialog({
         setActiveUpcomingSetSongIds(payload.upcomingSetSongIds)
         setActiveLastSetDate(payload.lastSetDate ?? undefined)
         setActiveExistingSetDates(payload.existingSetDates)
+        setCrossGroupMatchesBySongId(payload.crossGroupMatches ?? {})
+        setCrossGroupLookbackDays(payload.crossGroupLookbackDays ?? 365)
+        setCrossGroupMatchesLoaded(payload.crossGroupMatchesLoaded ?? true)
         setServiceDate(getDefaultServiceDate(payload.lastSetDate ?? undefined))
       } catch (err) {
         console.error('Failed to fetch group set dialog data:', err)
@@ -714,6 +843,9 @@ export function CreateSetDialog({
         setActiveUpcomingSetSongIds([])
         setActiveLastSetDate(undefined)
         setActiveExistingSetDates([])
+        setCrossGroupMatchesBySongId({})
+        setCrossGroupLookbackDays(365)
+        setCrossGroupMatchesLoaded(false)
         setServiceDate(undefined)
       } finally {
         setIsGroupLoading(false)
@@ -739,6 +871,9 @@ export function CreateSetDialog({
       setActiveUpcomingSetSongIds([])
       setActiveLastSetDate(undefined)
       setActiveExistingSetDates([])
+      setCrossGroupMatchesBySongId({})
+      setCrossGroupLookbackDays(365)
+      setCrossGroupMatchesLoaded(false)
       setServiceDate(undefined)
       return
     }
@@ -753,10 +888,17 @@ export function CreateSetDialog({
 
   useEffect(() => {
     if (!isOpen || !selectedGroupId) return
-    if (!activeSongs.length || !hasSongStats) {
+    if (!activeSongs.length || !hasSongStats || !crossGroupMatchesLoaded) {
       void loadGroupDialogData(selectedGroupId)
     }
-  }, [activeSongs.length, hasSongStats, isOpen, loadGroupDialogData, selectedGroupId])
+  }, [
+    activeSongs.length,
+    crossGroupMatchesLoaded,
+    hasSongStats,
+    isOpen,
+    loadGroupDialogData,
+    selectedGroupId,
+  ])
 
   return (
     <Dialog
@@ -777,6 +919,9 @@ export function CreateSetDialog({
             setActiveUpcomingSetSongIds(upcomingSetSongIds)
             setActiveLastSetDate(lastSetDate)
             setActiveExistingSetDates(existingSetDates)
+            setCrossGroupMatchesBySongId(initialCrossGroupMatches)
+            setCrossGroupLookbackDays(initialCrossGroupLookbackDays)
+            setCrossGroupMatchesLoaded(initialCrossGroupMatchesLoaded)
             setServiceDate(getDefaultServiceDate(lastSetDate))
           } else {
             setSelectedGroupId('')
@@ -787,6 +932,9 @@ export function CreateSetDialog({
             setActiveUpcomingSetSongIds([])
             setActiveLastSetDate(undefined)
             setActiveExistingSetDates([])
+            setCrossGroupMatchesBySongId({})
+            setCrossGroupLookbackDays(365)
+            setCrossGroupMatchesLoaded(false)
             setServiceDate(undefined)
           }
         }
@@ -1070,7 +1218,10 @@ export function CreateSetDialog({
                 <PopoverContent className="w-[280px] p-4 rounded-none" align="end">
                     <div className="space-y-3">
                       <div className="space-y-2">
-                        <Label htmlFor="random-pick-count" className="text-xs text-muted-foreground">
+                        <Label
+                          htmlFor="random-pick-count"
+                          className="text-xs text-muted-foreground mb-1 block"
+                        >
                           How many
                         </Label>
                         <Input
@@ -1093,7 +1244,7 @@ export function CreateSetDialog({
                       </div>
 
                       <div className="space-y-2">
-                        <Label className="text-xs text-muted-foreground">Play frequency</Label>
+                        <Label className="text-xs text-muted-foreground mb-1 block">Play frequency</Label>
                       <RadioCardGroup
                         value={randomPlayPreference}
                         onValueChange={(value) => setRandomPlayPreference(value as PlayPreference)}
@@ -1106,7 +1257,7 @@ export function CreateSetDialog({
                       </div>
 
                       <div className="space-y-2">
-                        <Label className="text-xs text-muted-foreground">Song age</Label>
+                        <Label className="text-xs text-muted-foreground mb-1 block">Song age</Label>
                       <RadioCardGroup
                         value={randomAgePreference}
                         onValueChange={(value) => setRandomAgePreference(value as AgePreference)}
@@ -1121,28 +1272,53 @@ export function CreateSetDialog({
                       <div
                         className={cn(
                           'flex items-center justify-between gap-2 border border-border/70 px-2 py-2 rounded-none transition-colors',
-                          randomAvoidUpcoming && 'border-primary/50'
+                          randomSkipRecentlyPlayed && 'border-primary/50'
                         )}
                       >
                         <Label
                           className={cn(
                             'text-xs',
-                            randomAvoidUpcoming ? 'text-foreground' : 'text-muted-foreground'
+                            randomSkipRecentlyPlayed ? 'text-foreground' : 'text-muted-foreground'
                           )}
                         >
-                          Avoid upcoming sets
+                          Skip songs recently played by other groups
                         </Label>
                         <Checkbox
-                          checked={randomAvoidUpcoming}
-                          onCheckedChange={(value) => setRandomAvoidUpcoming(Boolean(value))}
-                          aria-label="Avoid songs in upcoming sets"
-                        className="rounded-none"
+                          checked={randomSkipRecentlyPlayed}
+                          onCheckedChange={(value) => setRandomSkipRecentlyPlayed(Boolean(value))}
+                          aria-label="Skip songs recently played by other groups"
+                          className="rounded-none"
                         />
                       </div>
 
+                      {randomSkipRecentlyPlayed && (
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground mb-1 block">Time window</Label>
+                          <Select
+                            value={String(randomRecentWeeks)}
+                            onValueChange={(value) => {
+                              const nextValue = Number(value)
+                              if (!Number.isFinite(nextValue)) return
+                              setRandomRecentWeeks(nextValue)
+                            }}
+                          >
+                            <SelectTrigger className="h-8 w-full">
+                              <SelectValue>{`Last ${randomRecentWeeks} weeks`}</SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {recentWindowOptions.map((weeks) => (
+                                <SelectItem key={weeks} value={String(weeks)}>
+                                  {weeks === 1 ? 'Last week' : `Last ${weeks} weeks`}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+
                       {selectedSongs.length > 0 && (
                         <div className="space-y-2">
-                          <Label className="text-xs text-muted-foreground">Apply mode</Label>
+                          <Label className="text-xs text-muted-foreground mb-1 block">Apply mode</Label>
                           <RadioCardGroup
                             value={randomApplyMode}
                             onValueChange={(value) => setRandomApplyMode(value as 'append' | 'replace')}
@@ -1203,6 +1379,7 @@ export function CreateSetDialog({
                               song={song}
                               arrangements={songArrangements}
                               onRemove={() => handleRemoveSong(song.id)}
+                              crossGroupSummary={crossGroupMatchesBySongId[song.id]}
                               onArrangementChange={(arrangementId) => {
                                 setSelectedSongs((prev) =>
                                   prev.map((item) =>

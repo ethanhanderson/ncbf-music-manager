@@ -14,8 +14,8 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
-import { columns, type SongRow } from '@/app/songs/columns'
-import { SongsCatalogTable } from '@/app/songs/songs-catalog-table'
+import { columns, type SongRow } from '@/app/songs/_components/columns'
+import { SongsCatalogTable } from '@/app/songs/_components/songs-catalog-table'
 
 interface SongsPageProps {
   params: Promise<{ slug: string }>

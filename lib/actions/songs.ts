@@ -10,6 +10,7 @@ import {
   type SongAsset,
 } from '@/lib/supabase/server'
 import { extractText } from '@/lib/extractors'
+import { parseSongImportText } from '@/lib/song-import'
 import { createDefaultArrangementFromLyrics } from '@/lib/actions/song-arrangements'
 import { createSongRevisionSnapshot } from '@/lib/actions/song-revisions'
 
@@ -19,6 +20,21 @@ export interface DuplicateCheckResult {
   isDuplicate: boolean
   existingSong?: Song
   matchType?: 'title' | 'title_and_lyrics' | 'lyrics'
+}
+
+export type CrossGroupMatchType = 'title' | 'title_and_lyrics' | 'lyrics'
+
+export interface CrossGroupSongMatch {
+  matchedSongId: string
+  matchedSongTitle: string
+  matchedGroup: { id: string; name: string; slug: string }
+  matchType: CrossGroupMatchType
+  lastUsedDate: string | null
+}
+
+export interface CrossGroupSongMatchSummary {
+  lastUsedDate: string | null
+  matches: CrossGroupSongMatch[]
 }
 
 export interface SongListStats {
@@ -71,6 +87,18 @@ function areLyricsSimilar(text1: string, text2: string, threshold = 0.85): boole
   
   const similarity = (2 * commonWords) / (words1.size + words2.size)
   return similarity >= threshold
+}
+
+function toLocalDateValue(dateString?: string | null): number {
+  if (!dateString) return Number.NaN
+  const value = new Date(`${dateString}T00:00:00`).getTime()
+  return Number.isFinite(value) ? value : Number.NaN
+}
+
+function maxDateString(a: string | null, b: string | null): string | null {
+  if (!a) return b
+  if (!b) return a
+  return toLocalDateValue(a) >= toLocalDateValue(b) ? a : b
 }
 
 async function getSlidesTextBySongIds(
@@ -134,6 +162,164 @@ async function getSlidesTextBySongIds(
 
   return result
 }
+
+export const getCrossGroupSongMatches = cache(async (
+  groupId: string,
+  lookbackDays: number = 365
+): Promise<Record<string, CrossGroupSongMatchSummary>> => {
+  const supabase = createServerSupabaseClient()
+  const cutoffDate = new Date()
+  cutoffDate.setDate(cutoffDate.getDate() - lookbackDays)
+  const cutoff = cutoffDate.toISOString().split('T')[0]
+
+  const { data: currentSongs, error: currentSongsError } = await supabase
+    .from('songs')
+    .select('id, title')
+    .eq('group_id', groupId)
+
+  if (currentSongsError || !currentSongs || currentSongs.length === 0) {
+    return {}
+  }
+
+  const { data: recentSetSongs, error: recentError } = await supabase
+    .from('set_songs')
+    .select(`
+      song_id,
+      sets!inner(service_date, group_id),
+      songs!inner(id, title, group_id, music_groups!inner(id, name, slug))
+    `)
+    .gte('sets.service_date', cutoff)
+    .neq('sets.group_id', groupId)
+
+  if (recentError || !recentSetSongs || recentSetSongs.length === 0) {
+    return {}
+  }
+
+  type RecentSetSongRow = {
+    song_id: string | null
+    sets?: { service_date: string; group_id: string } | null
+    songs?: {
+      id: string
+      title: string
+      group_id: string
+      music_groups?: { id: string; name: string; slug: string } | null
+    } | null
+  }
+
+  const otherSongs = new Map<
+    string,
+    { id: string; title: string; group: { id: string; name: string; slug: string } }
+  >()
+  const otherSongLastUsed = new Map<string, string>()
+
+  ;(recentSetSongs as RecentSetSongRow[]).forEach((row) => {
+    const song = row.songs
+    const set = row.sets
+    const group = song?.music_groups
+    if (!song?.id || !song.title || !group || !set?.service_date) return
+    if (song.group_id === groupId || set.group_id === groupId) return
+
+    if (!otherSongs.has(song.id)) {
+      otherSongs.set(song.id, {
+        id: song.id,
+        title: song.title,
+        group: { id: group.id, name: group.name, slug: group.slug },
+      })
+    }
+    const previous = otherSongLastUsed.get(song.id) ?? null
+    otherSongLastUsed.set(song.id, maxDateString(previous, set.service_date) ?? set.service_date)
+  })
+
+  const otherSongIds = Array.from(otherSongs.keys())
+  if (otherSongIds.length === 0) {
+    return {}
+  }
+
+  const currentSongIds = currentSongs.map((song) => song.id)
+  const [currentLyricsBySongId, otherLyricsBySongId] = await Promise.all([
+    getSlidesTextBySongIds(supabase, currentSongIds),
+    getSlidesTextBySongIds(supabase, otherSongIds),
+  ])
+
+  const otherSongsByTitle = new Map<string, string[]>()
+  otherSongIds.forEach((songId) => {
+    const other = otherSongs.get(songId)
+    if (!other) return
+    const key = normalizeTextForComparison(other.title)
+    const existing = otherSongsByTitle.get(key) ?? []
+    existing.push(songId)
+    otherSongsByTitle.set(key, existing)
+  })
+
+  const otherSongsWithLyrics = otherSongIds.filter((songId) => {
+    const lyrics = otherLyricsBySongId.get(songId) ?? ''
+    return Boolean(lyrics.trim())
+  })
+
+  const matchesBySongId: Record<string, CrossGroupSongMatchSummary> = {}
+
+  currentSongs.forEach((song) => {
+    const normalizedTitle = normalizeTextForComparison(song.title)
+    const titleCandidates = otherSongsByTitle.get(normalizedTitle) ?? []
+    const currentLyrics = currentLyricsBySongId.get(song.id) ?? ''
+    const matchMap = new Map<string, CrossGroupSongMatch>()
+
+    titleCandidates.forEach((otherId) => {
+      const other = otherSongs.get(otherId)
+      if (!other) return
+      const otherLyrics = otherLyricsBySongId.get(otherId) ?? ''
+      const lyricsMatch =
+        currentLyrics.trim() && otherLyrics.trim()
+          ? areLyricsSimilar(currentLyrics, otherLyrics)
+          : false
+      const matchType: CrossGroupMatchType = lyricsMatch ? 'title_and_lyrics' : 'title'
+      matchMap.set(otherId, {
+        matchedSongId: otherId,
+        matchedSongTitle: other.title,
+        matchedGroup: other.group,
+        matchType,
+        lastUsedDate: otherSongLastUsed.get(otherId) ?? null,
+      })
+    })
+
+    if (currentLyrics.trim()) {
+      otherSongsWithLyrics.forEach((otherId) => {
+        const otherLyrics = otherLyricsBySongId.get(otherId) ?? ''
+        if (!otherLyrics.trim()) return
+        if (!areLyricsSimilar(currentLyrics, otherLyrics)) return
+
+        const existing = matchMap.get(otherId)
+        if (existing) {
+          if (existing.matchType === 'title') {
+            existing.matchType = 'title_and_lyrics'
+          }
+          return
+        }
+
+        const other = otherSongs.get(otherId)
+        if (!other) return
+        matchMap.set(otherId, {
+          matchedSongId: otherId,
+          matchedSongTitle: other.title,
+          matchedGroup: other.group,
+          matchType: 'lyrics',
+          lastUsedDate: otherSongLastUsed.get(otherId) ?? null,
+        })
+      })
+    }
+
+    if (matchMap.size > 0) {
+      const matches = Array.from(matchMap.values())
+      const lastUsedDate = matches.reduce<string | null>(
+        (latest, match) => maxDateString(latest, match.lastUsedDate),
+        null
+      )
+      matchesBySongId[song.id] = { lastUsedDate, matches }
+    }
+  })
+
+  return matchesBySongId
+})
 
 /**
  * Check if a song with the same title (and optionally lyrics) already exists
@@ -242,25 +428,45 @@ export const checkForDuplicateLyrics = cache(async (
  */
 export async function extractTextFromFile(
   formData: FormData
-): Promise<{ success: boolean; text?: string; title?: string; error?: string }> {
+): Promise<{
+  success: boolean
+  text?: string
+  title?: string
+  defaultKey?: string
+  ccliId?: string
+  artist?: string
+  linkUrl?: string
+  hasGroupHeadings?: boolean
+  error?: string
+}> {
   const file = formData.get('file') as File | null
   
   if (!file) {
     return { success: false, error: 'No file provided' }
   }
   
-  const title = file.name.split('.').slice(0, -1).join('.').trim()
+  const titleFromFilename = file.name.split('.').slice(0, -1).join('.').trim()
   const mimeType = file.type || 'application/octet-stream'
   
   try {
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
     const { text } = await extractText(buffer, mimeType, file.name)
+    const parsed = parseSongImportText(text, { fallbackTitle: titleFromFilename })
     
-    return { success: true, text, title }
+    return {
+      success: true,
+      text: parsed.lyrics,
+      title: parsed.title,
+      defaultKey: parsed.defaultKey,
+      ccliId: parsed.ccliId,
+      artist: parsed.artist,
+      linkUrl: parsed.linkUrl,
+      hasGroupHeadings: parsed.hasGroupHeadings,
+    }
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Failed to extract text'
-    return { success: false, error: errorMessage, title }
+    return { success: false, error: errorMessage, title: titleFromFilename }
   }
 }
 
@@ -959,6 +1165,13 @@ export interface CreateSongFromFileOptions {
   overrideExistingId?: string
   /** Pre-extracted text (to avoid re-extraction) */
   extractedText?: string
+  /** Parsed title to use instead of filename */
+  title?: string
+  /** Optional metadata parsed from the file */
+  defaultKey?: string
+  ccliId?: string
+  artist?: string
+  linkUrl?: string
 }
 
 export interface SongUsageInfo {
@@ -1069,7 +1282,8 @@ export async function createSongFromFile(
   }
 
   // Derive title from filename (remove extension)
-  const songTitle = file.name.split('.').slice(0, -1).join('.').trim()
+  const songTitleFromFilename = file.name.split('.').slice(0, -1).join('.').trim()
+  const songTitle = options?.title?.trim() || songTitleFromFilename
 
   if (!songTitle) {
     return { success: false, error: 'Could not derive song title from filename' }
@@ -1111,6 +1325,21 @@ export async function createSongFromFile(
         .eq('asset_type', 'lyrics_source')
     }
 
+    const updatePatch: Record<string, string | null> = {}
+    if (options?.title?.trim()) updatePatch.title = options.title.trim()
+    if (options?.defaultKey?.trim()) updatePatch.default_key = options.defaultKey.trim()
+    if (options?.ccliId?.trim()) updatePatch.ccli_id = options.ccliId.trim()
+    if (options?.artist?.trim()) updatePatch.artist = options.artist.trim()
+    if (options?.linkUrl?.trim()) updatePatch.link_url = options.linkUrl.trim()
+
+    if (Object.keys(updatePatch).length > 0) {
+      await supabase
+        .from('songs')
+        .update(updatePatch)
+        .eq('id', existingSong.id)
+        .eq('group_id', groupId)
+    }
+
     // Upload new file
     await processFileUpload(supabase, existingSong.id, groupId, file, options.extractedText)
 
@@ -1125,6 +1354,10 @@ export async function createSongFromFile(
     .insert({
       title: songTitle,
       group_id: groupId,
+      default_key: options?.defaultKey?.trim() || null,
+      ccli_id: options?.ccliId?.trim() || null,
+      artist: options?.artist?.trim() || null,
+      link_url: options?.linkUrl?.trim() || null,
     })
     .select()
     .single()

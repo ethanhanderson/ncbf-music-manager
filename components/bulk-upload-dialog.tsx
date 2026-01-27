@@ -68,6 +68,13 @@ interface QueuedFile {
   songId?: string
   // Duplicate detection
   extractedText?: string
+  songInfo?: {
+    title?: string
+    defaultKey?: string
+    ccliId?: string
+    artist?: string
+    linkUrl?: string
+  }
   duplicateInfo?: DuplicateCheckResult
   duplicateAction?: DuplicateAction
 }
@@ -208,6 +215,13 @@ export function BulkUploadDialog({
                     ...f,
                     status: 'duplicate' as const,
                     extractedText: extractResult.text,
+                    songInfo: {
+                      title: extractResult.title,
+                      defaultKey: extractResult.defaultKey,
+                      ccliId: extractResult.ccliId,
+                      artist: extractResult.artist,
+                      linkUrl: extractResult.linkUrl,
+                    },
                     duplicateInfo: duplicateCheck,
                     // Auto-apply global action if set
                     duplicateAction: globalDuplicateAction || undefined,
@@ -220,7 +234,18 @@ export function BulkUploadDialog({
           setQueue((prev) =>
             prev.map((f) =>
               f.id === queuedFile.id
-                ? { ...f, status: 'pending' as const, extractedText: extractResult.text }
+                ? {
+                    ...f,
+                    status: 'pending' as const,
+                    extractedText: extractResult.text,
+                    songInfo: {
+                      title: extractResult.title,
+                      defaultKey: extractResult.defaultKey,
+                      ccliId: extractResult.ccliId,
+                      artist: extractResult.artist,
+                      linkUrl: extractResult.linkUrl,
+                    },
+                  }
                 : f
             )
           )
@@ -335,6 +360,11 @@ export function BulkUploadDialog({
                 ? queuedFile.duplicateInfo?.existingSong?.id
                 : undefined,
             extractedText: queuedFile.extractedText,
+            title: queuedFile.songInfo?.title,
+            defaultKey: queuedFile.songInfo?.defaultKey,
+            ccliId: queuedFile.songInfo?.ccliId,
+            artist: queuedFile.songInfo?.artist,
+            linkUrl: queuedFile.songInfo?.linkUrl,
           }
         )
 

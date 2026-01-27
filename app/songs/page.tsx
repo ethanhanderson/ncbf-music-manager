@@ -4,8 +4,8 @@ import Link from 'next/link'
 import { SongCatalogActions } from '@/components/song-catalog-actions'
 import { getGroups } from '@/lib/actions/groups'
 import { getAllSongsWithGroupsWithStats } from '@/lib/actions/songs'
-import { columns, type SongRow } from './columns'
-import { SongsCatalogTable } from './songs-catalog-table'
+import { columns, type SongRow } from './_components/columns'
+import { SongsCatalogTable } from './_components/songs-catalog-table'
 import {
   Breadcrumb,
   BreadcrumbItem,
